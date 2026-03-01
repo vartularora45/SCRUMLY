@@ -3,11 +3,13 @@ import axios from 'axios';
 import Layout from '../components/layout/Layout';
 import Button from '../components/common/Button';
 import {
+    Mail, ArrowRight, RefreshCw, CheckCircle,
     Users, Plus, Trash2, Edit2, UserPlus, UserMinus,
     ChevronRight, X, Loader2, AlertCircle, Check,
     Search, Crown, Shield
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNavigate } from 'react-router-dom';
 
 // ─── Axios instance ────────────────────────────────────────────────────────────
 const api = axios.create({
@@ -21,13 +23,6 @@ api.interceptors.request.use(config => {
 });
 
 // ─── Tiny helpers ──────────────────────────────────────────────────────────────
-const Avatar = ({ seed, size = 8 }) => (
-    <img
-        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`}
-        className={`w-${size} h-${size} rounded-full border-2 border-white shadow-sm bg-slate-100`}
-        alt="avatar"
-    />
-);
 
 const Toast = ({ msg, type = 'success', onClose }) => (
     <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg text-sm font-medium animate-slide-up
@@ -130,118 +125,335 @@ const ProjectModal = ({ team, onClose, onSaved }) => {
 };
 
 // ─── Manage Members Modal ──────────────────────────────────────────────────────
-const MembersModal = ({ team, onClose, onTeamUpdated }) => {
-    const [email, setEmail]       = useState('');
-    const [loading, setLoading]   = useState(false);
-    const [removing, setRemoving] = useState(null);
-    const [error, setError]       = useState('');
-    const [success, setSuccess]   = useState('');
 
-    const handleAddMember = async () => {
-        if (!email.trim()) return setError('Enter a user email or ID');
-        setLoading(true); setError(''); setSuccess('');
-        try {
-            const res = await api.post(`/teams/${team._id}/members`, { email: email.trim() });
-            onTeamUpdated(res.data.team || res.data);
-            setSuccess('Member added!');
-            setEmail('');
-        } catch (e) {
-            setError(e.response?.data?.message || 'Failed to add member');
-        } finally {
-            setLoading(false);
-        }
-    };
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+const Avatar = ({ seed }) => (
+  <img
+    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}`}
+    alt={seed}
+    className="w-9 h-9 rounded-full border-2 border-white shadow-sm shrink-0"
+  />
+);
 
-    const handleRemoveMember = async (uid) => {
-        setRemoving(uid); setError('');
-        try {
-            const res = await api.delete(`/teams/${team._id}/members/${uid}`);
-            onTeamUpdated(res.data.team || res.data);
-        } catch (e) {
-            setError(e.response?.data?.message || 'Failed to remove member');
-        } finally {
-            setRemoving(null);
-        }
-    };
+// ─── OTP Verification Modal ───────────────────────────────────────────────────
+const OTPModal = ({ inviteId, inviteeName, onVerified, onClose, api }) => {
+  const [otp,     setOtp]     = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
 
-    const members = team.members || [];
+  const handleVerify = async () => {
+    if (otp.length !== 6) return setError('Enter the 6-digit code');
+    setLoading(true); setError('');
+    try {
+      const res = await api.post('/invites/verify-otp', { inviteId, otp });
+      
+      onVerified(res.data.team);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Verification failed');
+    } finally { setLoading(false); }
+  };
 
-    return (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-5">
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-800">Manage Members</h3>
-                        <p className="text-xs text-slate-400 mt-0.5">{team.name} · {members.length} member{members.length !== 1 ? 's' : ''}</p>
-                    </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        style={{ boxShadow: '0 32px 64px -12px rgba(0,0,0,0.25)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Top gradient bar */}
+        <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-violet-500" />
 
-                <div className="flex gap-2 mb-4">
-                    <input
-                        className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 focus:bg-white transition-all placeholder-slate-400"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleAddMember()}
-                        placeholder="User email or ID..."
-                    />
-                    <button
-                        onClick={handleAddMember}
-                        disabled={loading}
-                        className="px-4 py-2.5 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-xl transition-colors disabled:opacity-60 flex items-center gap-1.5 shrink-0"
-                    >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                        Add
-                    </button>
-                </div>
-
-                {error  && <p className="text-red-500 text-xs flex items-center gap-1.5 mb-3 bg-red-50 px-3 py-2 rounded-lg"><AlertCircle className="w-3.5 h-3.5" />{error}</p>}
-                {success && <p className="text-emerald-600 text-xs flex items-center gap-1.5 mb-3 bg-emerald-50 px-3 py-2 rounded-lg"><Check className="w-3.5 h-3.5" />{success}</p>}
-
-                <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-2">
-                    {members.length === 0 ? (
-                        <p className="text-center text-slate-400 text-sm py-8">No members yet.</p>
-                    ) : members.map((m, i) => {
-                        const uid   = m._id || m;
-                        const name  = m.name  || 'Unknown';
-                        const email = m.email || uid;
-                        const isOwner = i === 0;
-                        return (
-                            <div key={uid} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
-                                <Avatar seed={name} size={9} />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold text-slate-700 truncate">{name}</p>
-                                    <p className="text-xs text-slate-400 truncate">{email}</p>
-                                </div>
-                                {isOwner ? (
-                                    <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-                                        <Crown className="w-3 h-3" /> Owner
-                                    </span>
-                                ) : (
-                                    <button
-                                        onClick={() => handleRemoveMember(uid)}
-                                        disabled={removing === uid}
-                                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                                        title="Remove member"
-                                    >
-                                        {removing === uid ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-
-                <div className="flex justify-end mt-5">
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">
-                        Done
-                    </button>
-                </div>
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                <Mail className="w-5 h-5 text-indigo-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 leading-tight">Enter OTP</h3>
+                <p className="text-xs text-slate-400 mt-0.5 leading-snug">
+                  Ask <span className="font-semibold text-slate-600">{inviteeName}</span> for the code sent to their email
+                </p>
+              </div>
             </div>
+            <button
+              onClick={onClose}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-slate-500 hover:bg-slate-100 transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* OTP Input */}
+          <div className="mb-4">
+            <input
+              autoFocus
+              maxLength={6}
+              value={otp}
+              onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleVerify()}
+              placeholder="· · · · · ·"
+              className="w-full px-4 py-4 text-center text-3xl font-black tracking-[0.5em] text-indigo-600 font-mono border-2 border-slate-200 rounded-2xl bg-slate-50 focus:outline-none focus:border-indigo-400 focus:bg-white transition-all placeholder:text-slate-200 placeholder:tracking-[0.4em] placeholder:text-2xl"
+            />
+          </div>
+
+          {/* Timer hint */}
+          <p className="text-center text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100 mb-4">
+            ⏱ Code expires in 15 minutes
+          </p>
+
+          {error && (
+            <p className="flex items-center gap-1.5 text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg border border-red-100 mb-4">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
+            </p>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2.5">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleVerify}
+              disabled={loading || otp.length !== 6}
+              className="flex-1 py-2.5 text-sm font-semibold text-white bg-indigo-500 hover:bg-indigo-600 rounded-xl transition-all disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2"
+            >
+              {loading
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</>
+                : <><CheckCircle className="w-4 h-4" /> Verify & Add</>
+              }
+            </button>
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
+};
+
+// ─── MembersModal ─────────────────────────────────────────────────────────────
+const MembersModal = ({ team, api, onClose, onTeamUpdated }) => {
+  const [email,       setEmail]       = useState('');
+  const [sendLoading, setSendLoading] = useState(false);
+  const [removing,    setRemoving]    = useState(null);
+  const [error,       setError]       = useState('');
+  const [success,     setSuccess]     = useState('');
+
+  // OTP modal state
+  const [otpModal, setOtpModal] = useState(null); // { inviteId, inviteeName }
+
+  const members = team?.members || [];
+
+  // ── Step 1: Send OTP ────────────────────────────────────────────────────────
+  const handleSendOTP = async () => {
+    if (!email.trim()) return setError('Enter the email address');
+    if (!/\S+@\S+\.\S+/.test(email)) return setError('Enter a valid email address');
+    setSendLoading(true); setError(''); setSuccess('');
+    try {
+      const res = await api.post('/invites/send-otp', {
+        teamId: team._id,
+        email:  email.trim(),
+      });
+      console.log('SEND OTP RESPONSE:', res.data);
+      setEmail('');
+      setSuccess(res.data.message);
+      // Open OTP verification modal
+      setOtpModal({
+        inviteId:    res.data.inviteId,
+        inviteeName: res.data.inviteeName,
+      });
+    } catch (e) {
+        console.error('SEND OTP ERROR:', e);
+      setError(e.response?.data?.message || 'Failed to send OTP');
+    } finally { setSendLoading(false); }
+  };
+
+  // ── Step 2 callback: OTP verified ──────────────────────────────────────────
+  const handleVerified = (updatedTeam) => {
+    setOtpModal(null);
+    setSuccess(`Member added successfully! 🎉`);
+    onTeamUpdated(updatedTeam);
+  };
+
+  // ── Remove member ───────────────────────────────────────────────────────────
+  const handleRemove = async (uid) => {
+    setRemoving(uid); setError(''); setSuccess('');
+    try {
+      const res = await api.delete(`/teams/${team._id}/members/${uid}`);
+      onTeamUpdated(res.data.team || res.data);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Failed to remove member');
+    } finally { setRemoving(null); }
+  };
+
+  return (
+    <>
+      {/* OTP Modal (above MembersModal) */}
+      {otpModal && (
+        <OTPModal
+          inviteId={otpModal.inviteId}
+          inviteeName={otpModal.inviteeName}
+          api={api}
+          onVerified={handleVerified}
+          onClose={() => setOtpModal(null)}
+        />
+      )}
+
+      <div
+        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <div
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* ── Header ── */}
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+                <Users className="w-4.5 h-4.5 text-indigo-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 leading-tight">Manage Members</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {team?.name} · {members.length} member{members.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="px-6 py-5 space-y-5">
+
+            {/* ── Invite Section ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-widest">
+                  Invite by Email
+                </p>
+              </div>
+              <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                An OTP will be sent to their email. Ask them to share the code with you to verify and add them.
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setError(''); }}
+                  onKeyDown={e => e.key === 'Enter' && handleSendOTP()}
+                  placeholder="colleague@company.com"
+                  type="email"
+                  disabled={sendLoading}
+                />
+                <button
+                  onClick={handleSendOTP}
+                  disabled={sendLoading || !email.trim()}
+                  className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-500 hover:bg-indigo-600 rounded-xl transition-all disabled:opacity-50 active:scale-95 flex items-center gap-1.5 shrink-0"
+                >
+                  {sendLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <ArrowRight className="w-4 h-4" />
+                  }
+                  {sendLoading ? 'Sending…' : 'Send OTP'}
+                </button>
+              </div>
+
+              {/* Feedback */}
+              {error && (
+                <p className="flex items-center gap-1.5 text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg border border-red-100 mt-3">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
+                </p>
+              )}
+              {success && (
+                <p className="flex items-center gap-1.5 text-emerald-600 text-xs bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 mt-3">
+                  <CheckCircle className="w-3.5 h-3.5 shrink-0" /> {success}
+                </p>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-100" />
+              <span className="text-xs text-slate-300 font-medium">Members</span>
+              <div className="flex-1 h-px bg-slate-100" />
+            </div>
+
+            {/* ── Members List ── */}
+            <div
+              className="space-y-1.5 max-h-56 overflow-y-auto"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: '#e2e8f0 transparent' }}
+            >
+              {members.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                  <p className="text-slate-400 text-sm">No members yet</p>
+                </div>
+              ) : members.map((m) => {
+                const uid     = m.user?._id || m._id || m;
+                const name    = m.user?.name  || m.name  || 'Unknown';
+                const email   = m.user?.email || m.email || '';
+                const isOwner = team.owner?._id?.toString() === uid?.toString()
+                             || team.owner?.toString() === uid?.toString();
+
+                return (
+                  <div
+                    key={uid}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100/80 transition-colors group"
+                  >
+                    <Avatar seed={name} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-700 truncate leading-tight">{name}</p>
+                      <p className="text-xs text-slate-400 truncate">{email}</p>
+                    </div>
+                    {isOwner ? (
+                      <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 shrink-0">
+                        <Crown className="w-3 h-3" /> Owner
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleRemove(uid)}
+                        disabled={removing === uid}
+                        className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 opacity-0 group-hover:opacity-100 shrink-0"
+                        title="Remove member"
+                      >
+                        {removing === uid
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <UserMinus className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Footer ── */}
+          <div className="flex justify-end px-6 pb-5">
+            <button
+              onClick={onClose}
+              className="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 };
 
 // ─── Project Card ─────────────────────────────────────────────────────────────────
@@ -302,6 +514,7 @@ const ProjectCard = ({ team, onEdit, onDelete, onManageMembers, onSelect, isActi
 // ─── MAIN PAGE ─────────────────────────────────────────────────────────────────
 const ProjectsPage = () => {
     const { activeTeam, setActiveTeam } = useAuth();
+    const navigate = useNavigate();
 
     const [projects,    setProjects]    = useState([]);
     const [loading,     setLoading]     = useState(true);
@@ -453,7 +666,7 @@ const ProjectsPage = () => {
                                 isActive={activeTeam?._id === project._id}
                                 onSelect={() => {
                                     setActiveTeam(project);
-                                    showToast(`Switched to "${project.name}"`);
+                                    navigate('/team');
                                 }}
                                 onEdit={() => setEditTarget(project)}
                                 onDelete={() => handleDelete(project)}
@@ -480,6 +693,7 @@ const ProjectsPage = () => {
             {membTarget && (
                 <MembersModal
                     team={membTarget}
+                    api={api}
                     onClose={() => setMembTarget(null)}
                     onTeamUpdated={handleTeamUpdated}
                 />

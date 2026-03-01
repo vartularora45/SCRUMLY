@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import TaskCard from '../tasks/TaskCard';
-import { Plus, X, Loader2, AlertCircle, History } from 'lucide-react';
+import { Plus, X, Loader2, AlertCircle, History, Sparkles } from 'lucide-react';
 import Badge from '../../common/Badge';
 import { useAuth } from '../../../context/AuthContext.jsx';
 
@@ -17,238 +17,219 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-// ─── Column config — colId matches backend status values (uppercase) ───────────
-//     Backend uses: "TODO" | "IN_PROGRESS" | "DONE" | "BLOCKED"
+// ─── Column Config ─────────────────────────────────────────────────────────────
 const COLUMNS = [
-    { title: 'TO DO',       colId: 'TODO',        statusLabel: 'Todo',        badgeVariant: 'secondary' },
-    { title: 'IN PROGRESS', colId: 'IN_PROGRESS', statusLabel: 'In Progress', badgeVariant: 'primary'   },
-    { title: 'DONE',        colId: 'DONE',        statusLabel: 'Done',        badgeVariant: 'success'   },
-    { title: 'BLOCKED',     colId: 'BLOCKED',     statusLabel: 'Blocked',     badgeVariant: 'danger'    },
+    {
+        title: 'To Do',
+        colId: 'TODO',
+        statusLabel: 'Todo',
+        badgeVariant: 'secondary',
+        accent: '#94a3b8',
+        bg: 'from-slate-50 to-slate-100/60',
+        border: 'border-slate-200',
+        dot: 'bg-slate-400',
+        countBg: 'bg-slate-200 text-slate-600',
+    },
+    {
+        title: 'In Progress',
+        colId: 'IN_PROGRESS',
+        statusLabel: 'In Progress',
+        badgeVariant: 'primary',
+        accent: '#6366f1',
+        bg: 'from-indigo-50/70 to-violet-50/40',
+        border: 'border-indigo-200',
+        dot: 'bg-indigo-400',
+        countBg: 'bg-indigo-100 text-indigo-600',
+    },
+    {
+        title: 'Done',
+        colId: 'DONE',
+        statusLabel: 'Done',
+        badgeVariant: 'success',
+        accent: '#10b981',
+        bg: 'from-emerald-50/70 to-teal-50/40',
+        border: 'border-emerald-200',
+        dot: 'bg-emerald-400',
+        countBg: 'bg-emerald-100 text-emerald-600',
+    },
+    {
+        title: 'Blocked',
+        colId: 'BLOCKED',
+        statusLabel: 'Blocked',
+        badgeVariant: 'danger',
+        accent: '#f43f5e',
+        bg: 'from-rose-50/70 to-pink-50/40',
+        border: 'border-rose-200',
+        dot: 'bg-rose-400',
+        countBg: 'bg-rose-100 text-rose-600',
+    },
 ];
 
+// ─── Shared Modal Wrapper ──────────────────────────────────────────────────────
+const Modal = ({ onClose, children }) => (
+    
+    <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)' }}
+        onClick={onClose}
+    >
+        <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            style={{ boxShadow: '0 32px 64px -12px rgba(0,0,0,0.25)' }}
+            onClick={e => e.stopPropagation()}
+        >
+            {children}
+        </div>
+    </div>
+);
+
+const ModalHeader = ({ title, icon, onClose }) => (
+    <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+        <div className="flex items-center gap-2.5">
+            {icon && <span className="text-indigo-500">{icon}</span>}
+            <h3 className="text-base font-bold text-slate-800 tracking-tight">{title}</h3>
+        </div>
+        <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+        >
+            <X className="w-4 h-4" />
+        </button>
+    </div>
+);
+
+const FormField = ({ label, optional, children }) => (
+    <div>
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
+            {label}
+            {optional && <span className="normal-case font-normal text-slate-400">(optional)</span>}
+        </label>
+        {children}
+    </div>
+);
+
+const inputCls = "w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50/80 focus:outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300";
+
 // ─── Add Task Modal ────────────────────────────────────────────────────────────
-// Sends: title, description, teamId, assignee, priority, status, confidence
-// (aiGenerated & sourceMessage are AI-only fields, not in manual form)
 const AddTaskModal = ({ columnStatus, teamId, onClose, onCreated }) => {
-    const [form, setForm]       = useState({
-        title:       '',
-        description: '',
-        priority:    'Medium',   // backend accepts: High | Medium | Low
-        status:      columnStatus, // backend value e.g. "TODO"
-        assignee:    '',
-        confidence:  '',
+    const [form, setForm] = useState({
+        title: '', description: '', priority: 'Medium',
+        status: columnStatus, assignee: '', confidence: '',
     });
     const [loading, setLoading] = useState(false);
-    const [error, setError]     = useState('');
+    const [error, setError] = useState('');
 
     const handleSubmit = async () => {
         if (!form.title.trim()) return setError('Title is required');
-        setLoading(true);
-        setError('');
+        setLoading(true); setError('');
         try {
-            // Send only fields the backend createTask controller uses
             const payload = {
-                title:       form.title.trim(),
-                description: form.description.trim(),
-                teamId,
-                priority:    form.priority,
-                status:      form.status,
-                ...(form.assignee   && { assignee:   form.assignee }),
+                title: form.title.trim(), description: form.description.trim(),
+                teamId, priority: form.priority, status: form.status,
+                ...(form.assignee && { assignee: form.assignee }),
                 ...(form.confidence && { confidence: Number(form.confidence) }),
             };
             const res = await api.post('/tasks', payload);
-            onCreated(res.data); // controller returns task directly (no wrapper)
-            onClose();
+            onCreated(res.data); onClose();
         } catch (e) {
             setError(e.response?.data?.message || 'Failed to create task');
-        } finally {
-            setLoading(false);
-        }
+        } finally { setLoading(false); }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-5">
-                    <h3 className="text-lg font-bold text-slate-800">Add New Task</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="w-5 h-5" /></button>
+        <Modal onClose={onClose}>
+            <ModalHeader title="New Task" icon={<Plus className="w-4 h-4" />} onClose={onClose} />
+            <div className="px-6 py-5 space-y-4">
+                <FormField label="Title">
+                    <input className={inputCls} value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="What needs to be done?" />
+                </FormField>
+                <FormField label="Description">
+                    <textarea className={`${inputCls} resize-none h-20`} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Add more details..." />
+                </FormField>
+                <div className="grid grid-cols-2 gap-3">
+                    <FormField label="Priority">
+                        <select className={inputCls} value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}>
+                            {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
+                        </select>
+                    </FormField>
+                    <FormField label="Status">
+                        <select className={inputCls} value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+                            {COLUMNS.map(c => <option key={c.colId} value={c.colId}>{c.title}</option>)}
+                        </select>
+                    </FormField>
                 </div>
-
-                <div className="space-y-4">
-                    {/* Title */}
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Title *</label>
-                        <input
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 focus:bg-white transition-colors"
-                            value={form.title}
-                            onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                            placeholder="Task title..."
-                        />
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Description</label>
-                        <textarea
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 focus:bg-white transition-colors resize-none h-20"
-                            value={form.description}
-                            onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-                            placeholder="What needs to be done?"
-                        />
-                    </div>
-
-                    {/* Priority + Status */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Priority</label>
-                            <select
-                                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 transition-colors"
-                                value={form.priority}
-                                onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
-                            >
-                                {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Status</label>
-                            <select
-                                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 transition-colors"
-                                value={form.status}
-                                onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
-                            >
-                                {COLUMNS.map(c => <option key={c.colId} value={c.colId}>{c.title}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Confidence (optional) */}
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Confidence % <span className="normal-case font-normal">(optional)</span></label>
-                        <input
-                            type="number"
-                            min="0" max="100"
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 transition-colors"
-                            value={form.confidence}
-                            onChange={e => setForm(p => ({ ...p, confidence: e.target.value }))}
-                            placeholder="e.g. 85"
-                        />
-                    </div>
-
-                    {error && (
-                        <p className="text-red-500 text-sm flex items-center gap-1.5">
-                            <AlertCircle className="w-4 h-4" /> {error}
-                        </p>
-                    )}
-                </div>
-
-                <div className="flex gap-3 mt-6 justify-end">
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
-                    <button onClick={handleSubmit} disabled={loading} className="px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-60 flex items-center gap-2">
-                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {loading ? 'Creating…' : 'Create Task'}
-                    </button>
-                </div>
+                <FormField label="Confidence %" optional>
+                    <input type="number" min="0" max="100" className={inputCls} value={form.confidence} onChange={e => setForm(p => ({ ...p, confidence: e.target.value }))} placeholder="e.g. 85" />
+                </FormField>
+                {error && <p className="text-red-500 text-sm flex items-center gap-1.5 bg-red-50 px-3 py-2 rounded-lg"><AlertCircle className="w-4 h-4 shrink-0" /> {error}</p>}
             </div>
-        </div>
+            <div className="flex gap-2.5 px-6 pb-6 justify-end">
+                <button onClick={onClose} className="px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
+                <button onClick={handleSubmit} disabled={loading} className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-500 rounded-xl hover:bg-indigo-600 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
+                    {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : <><Plus className="w-4 h-4" /> Create Task</>}
+                </button>
+            </div>
+        </Modal>
     );
 };
 
 // ─── Edit Task Modal ───────────────────────────────────────────────────────────
-// PUT /api/tasks/:id  → backend only updates: title, description, assignee, priority
-// Status is NOT updated here — it goes via PATCH /status
 const EditTaskModal = ({ task, onClose, onUpdated }) => {
-    const [form, setForm]       = useState({
-        title:       task.title       || '',
-        description: task.description || '',
-        priority:    task.priority    || 'Medium',
-        assignee:    task.assignee?._id || task.assignee || '',
+    const [form, setForm] = useState({
+        title: task.title || '', description: task.description || '',
+        priority: task.priority || 'Medium',
+        assignee: task.assignee?._id || task.assignee || '',
     });
     const [loading, setLoading] = useState(false);
-    const [error, setError]     = useState('');
+    const [error, setError] = useState('');
 
     const handleSubmit = async () => {
         if (!form.title.trim()) return setError('Title is required');
-        setLoading(true);
-        setError('');
+        setLoading(true); setError('');
         try {
-            // Only send fields updateTask controller accepts
             const payload = {
-                title:       form.title.trim(),
-                description: form.description.trim(),
-                priority:    form.priority,
+                title: form.title.trim(), description: form.description.trim(),
+                priority: form.priority,
                 ...(form.assignee && { assignee: form.assignee }),
             };
             const res = await api.put(`/tasks/${task._id}`, payload);
-            onUpdated(res.data); // controller returns task directly
-            onClose();
+            onUpdated(res.data); onClose();
         } catch (e) {
             setError(e.response?.data?.message || 'Failed to update task');
-        } finally {
-            setLoading(false);
-        }
+        } finally { setLoading(false); }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-5">
-                    <h3 className="text-lg font-bold text-slate-800">Edit Task</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="w-5 h-5" /></button>
-                </div>
-
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Title *</label>
-                        <input
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 focus:bg-white transition-colors"
-                            value={form.title}
-                            onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Description</label>
-                        <textarea
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 focus:bg-white transition-colors resize-none h-20"
-                            value={form.description}
-                            onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Priority</label>
-                        <select
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-blue-400 transition-colors"
-                            value={form.priority}
-                            onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
-                        >
-                            {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
-                        </select>
-                    </div>
-
-                    {/* Note: status is not editable here — use drag & drop */}
-                    <p className="text-xs text-slate-400 italic">💡 Status change karne ke liye card ko drag karo</p>
-
-                    {error && (
-                        <p className="text-red-500 text-sm flex items-center gap-1.5">
-                            <AlertCircle className="w-4 h-4" /> {error}
-                        </p>
-                    )}
-                </div>
-
-                <div className="flex gap-3 mt-6 justify-end">
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
-                    <button onClick={handleSubmit} disabled={loading} className="px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-60 flex items-center gap-2">
-                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {loading ? 'Saving…' : 'Save Changes'}
-                    </button>
-                </div>
+        <Modal onClose={onClose}>
+            <ModalHeader title="Edit Task" onClose={onClose} />
+            <div className="px-6 py-5 space-y-4">
+                <FormField label="Title">
+                    <input className={inputCls} value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+                </FormField>
+                <FormField label="Description">
+                    <textarea className={`${inputCls} resize-none h-20`} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+                </FormField>
+                <FormField label="Priority">
+                    <select className={inputCls} value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}>
+                        {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
+                    </select>
+                </FormField>
+                <p className="text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                    💡 Status change ke liye card ko drag karke column mein drop karo
+                </p>
+                {error && <p className="text-red-500 text-sm flex items-center gap-1.5 bg-red-50 px-3 py-2 rounded-lg"><AlertCircle className="w-4 h-4 shrink-0" /> {error}</p>}
             </div>
-        </div>
+            <div className="flex gap-2.5 px-6 pb-6 justify-end">
+                <button onClick={onClose} className="px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
+                <button onClick={handleSubmit} disabled={loading} className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-500 rounded-xl hover:bg-indigo-600 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
+                    {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : 'Save Changes'}
+                </button>
+            </div>
+        </Modal>
     );
 };
 
 // ─── History Modal ─────────────────────────────────────────────────────────────
-// GET /api/tasks/:id/history  → returns task.statusHistory array directly
-// Each item: { status, changedAt, _id }  (no from/to/changedBy in backend)
 const HistoryModal = ({ taskId, onClose }) => {
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -260,53 +241,44 @@ const HistoryModal = ({ taskId, onClose }) => {
             .finally(() => setLoading(false));
     }, [taskId]);
 
-    // Map colId back to human-readable label
     const labelFor = (status) => COLUMNS.find(c => c.colId === status)?.title || status;
+    const colFor   = (status) => COLUMNS.find(c => c.colId === status);
 
     return (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center gap-2">
-                        <History className="w-5 h-5 text-indigo-500" />
-                        <h3 className="text-lg font-bold text-slate-800">Status History</h3>
-                    </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="w-5 h-5" /></button>
-                </div>
-
+        <Modal onClose={onClose}>
+            <ModalHeader title="Status History" icon={<History className="w-4 h-4" />} onClose={onClose} />
+            <div className="px-6 py-4">
                 {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                        <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
-                    </div>
+                    <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-indigo-400" /></div>
                 ) : history.length === 0 ? (
-                    <p className="text-slate-400 text-sm text-center py-12">No history found.</p>
+                    <p className="text-slate-400 text-sm text-center py-12">Koi history nahi mili.</p>
                 ) : (
-                    <div className="max-h-72 overflow-y-auto custom-scrollbar">
-                        {/* Show newest first */}
-                        {[...history].reverse().map((h, i) => (
-                            <div key={h._id || i} className="flex gap-3 py-3 border-b border-slate-100 last:border-0 items-start">
-                                <div className="w-2 h-2 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
-                                <div>
-                                    <p className="text-sm text-slate-700 font-medium">
-                                        Moved to{' '}
-                                        <span className="text-indigo-600 font-semibold">{labelFor(h.status)}</span>
-                                    </p>
-                                    {h.changedAt && (
-                                        <p className="text-xs text-slate-400 mt-0.5">
-                                            {new Date(h.changedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                    <div className="max-h-72 overflow-y-auto -mx-1 px-1 space-y-1">
+                        {[...history].reverse().map((h, i) => {
+                            const col = colFor(h.status);
+                            return (
+                                <div key={h._id || i} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors items-start">
+                                    <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${col?.dot || 'bg-slate-400'}`} />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm text-slate-700 font-medium">
+                                            Moved to <span className="font-semibold" style={{ color: col?.accent || '#64748b' }}>{labelFor(h.status)}</span>
                                         </p>
-                                    )}
+                                        {h.changedAt && (
+                                            <p className="text-xs text-slate-400 mt-0.5">
+                                                {new Date(h.changedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
-
-                <div className="flex justify-end mt-5">
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Close</button>
-                </div>
             </div>
-        </div>
+            <div className="flex justify-end px-6 pb-6 pt-2">
+                <button onClick={onClose} className="px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Close</button>
+            </div>
+        </Modal>
     );
 };
 
@@ -316,43 +288,66 @@ const KanbanColumn = ({ col, tasks, onAddTask, onDrop, onEdit, onDelete, onViewH
 
     return (
         <div
-            className="flex-1 min-w-[300px] flex flex-col h-full"
+            className="flex flex-col w-72 shrink-0 rounded-2xl overflow-hidden border transition-all duration-200"
+            style={{
+                borderColor: over ? col.accent : 'transparent',
+                background: over ? `${col.accent}08` : 'transparent',
+                boxShadow: over ? `0 0 0 2px ${col.accent}40` : 'none',
+            }}
             onDragOver={e => { e.preventDefault(); setOver(true); }}
             onDragLeave={() => setOver(false)}
             onDrop={e => { e.preventDefault(); setOver(false); onDrop(e.dataTransfer.getData('taskId'), col.colId); }}
         >
-            <div className="flex items-center justify-between mb-3 px-1">
-                <h4 className="font-semibold text-slate-700">{col.title}</h4>
-                <Badge variant={col.badgeVariant}>{tasks.length}</Badge>
+            {/* Column Header */}
+            <div className={`flex items-center justify-between px-4 py-3.5 bg-gradient-to-r ${col.bg} border-b ${col.border}`}>
+                <div className="flex items-center gap-2.5">
+                    <div className={`w-2 h-2 rounded-full ${col.dot}`} />
+                    <h4 className="text-sm font-bold text-slate-700 tracking-tight">{col.title}</h4>
+                </div>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${col.countBg}`}>
+                    {tasks.length}
+                </span>
             </div>
 
-            <div className={`bg-slate-100/50 rounded-xl p-3 flex-1 overflow-y-auto custom-scrollbar border transition-all duration-200 ${over ? 'border-blue-300 bg-blue-50/30' : 'border-slate-100'}`}>
-                <div className="space-y-3">
-                    {tasks.map(task => (
-                        <div
-                            key={task._id}
-                            className="cursor-grab active:cursor-grabbing"
-                            draggable
-                            onDragStart={e => e.dataTransfer.setData('taskId', task._id)}
-                        >
-                            <TaskCard
-                                {...task}
-                                status={col.statusLabel}
-                                // assignee is populated object {name, email} from backend
-                                assignee={task.assignee?.name || task.assignee}
-                                onEdit={() => onEdit(task)}
-                                onDelete={() => onDelete(task._id)}
-                                onViewHistory={() => onViewHistory(task._id)}
-                            />
-                        </div>
-                    ))}
-                </div>
+            {/* Tasks */}
+            <div className={`flex-1 overflow-y-auto p-3 space-y-2.5 bg-gradient-to-b ${col.bg} min-h-[120px]`}
+                style={{ scrollbarWidth: 'thin', scrollbarColor: '#e2e8f0 transparent' }}
+            >
+                {tasks.map(task => (
+                    <div
+                        key={task._id}
+                        className="group cursor-grab active:cursor-grabbing active:scale-[0.98] transition-transform"
+                        draggable
+                        onDragStart={e => e.dataTransfer.setData('taskId', task._id)}
+                    >
+                        <TaskCard
+                            {...task}
+                            status={col.statusLabel}
+                            assignee={task.assignee?.name || task.assignee}
+                            onEdit={() => onEdit(task)}
+                            onDelete={() => onDelete(task._id)}
+                            onViewHistory={() => onViewHistory(task._id)}
+                        />
+                    </div>
+                ))}
+            </div>
 
+            {/* Add Task Button */}
+            <div className={`p-3 bg-gradient-to-b ${col.bg} border-t ${col.border}`}>
                 <button
                     onClick={() => onAddTask(col.colId)}
-                    className="w-full mt-3 py-2 border-2 border-dashed border-slate-200 rounded-lg text-slate-400 text-sm font-medium hover:border-blue-300 hover:text-blue-500 transition-colors flex items-center justify-center gap-1"
+                    className="w-full py-2 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-1.5 border-2 border-dashed hover:border-solid group"
+                    style={{ borderColor: `${col.accent}60`, color: col.accent }}
+                    onMouseEnter={e => {
+                        e.currentTarget.style.background = `${col.accent}10`;
+                        e.currentTarget.style.borderColor = col.accent;
+                    }}
+                    onMouseLeave={e => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.borderColor = `${col.accent}60`;
+                    }}
                 >
-                    <Plus className="w-4 h-4" /> Add Task
+                    <Plus className="w-3.5 h-3.5" /> Add Task
                 </button>
             </div>
         </div>
@@ -360,85 +355,85 @@ const KanbanColumn = ({ col, tasks, onAddTask, onDrop, onEdit, onDelete, onViewH
 };
 
 // ─── Main KanbanBoard ──────────────────────────────────────────────────────────
-const KanbanBoard = () => {
+const KanbanBoard = ({ searchQuery = '' }) => {
     const { activeTeam } = useAuth();
     const teamId = activeTeam?._id;
 
-    const [tasks,      setTasks]      = useState([]);
-    const [loading,    setLoading]    = useState(true);
-    const [error,      setError]      = useState('');
-    const [addModal,   setAddModal]   = useState(null);  // colId string e.g. "TODO"
-    const [editModal,  setEditModal]  = useState(null);  // full task object
-    const [histModal,  setHistModal]  = useState(null);  // task._id string
+    const [tasks,     setTasks]     = useState([]);
+    const [loading,   setLoading]   = useState(true);
+    const [error,     setError]     = useState('');
+    const [addModal,  setAddModal]  = useState(null);
+    const [editModal, setEditModal] = useState(null);
+    const [histModal, setHistModal] = useState(null);
 
-    // ── 1. GET /tasks/:teamId  →  returns array directly (no wrapper) ────────
     const fetchTasks = useCallback(async () => {
         if (!teamId) return;
-        setLoading(true);
-        setError('');
+        setLoading(true); setError('');
         try {
             const res = await api.get(`/tasks/${teamId}`);
-            // Backend returns array directly: res.data is Task[]
-            setTasks(Array.isArray(res.data) ? res.data : []);
+            console.log('Fetched tasks:', res.data);
+            
+            // Deduplicate by _id in case of double fetch (React 18 Strict Mode)
+            const raw = Array.isArray(res.data) ? res.data : [];
+            const seen = new Set();
+            setTasks(raw.filter(t => seen.has(t._id) ? false : seen.add(t._id)));
         } catch (e) {
             setError(e.response?.data?.message || 'Failed to load tasks');
-        } finally {
-            setLoading(false);
-        }
+        } finally { setLoading(false); }
     }, [teamId]);
 
     useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
-    // ── 2. PATCH /tasks/:id/status  →  { status }  (drag & drop) ────────────
     const handleDrop = async (taskId, newStatus) => {
         const prev = tasks;
-        // Optimistic update
         setTasks(t => t.map(x => x._id === taskId ? { ...x, status: newStatus } : x));
-        try {
-            await api.patch(`/tasks/${taskId}/status`, { status: newStatus });
-        } catch {
-            setTasks(prev); // rollback
-        }
+        try { await api.patch(`/tasks/${taskId}/status`, { status: newStatus }); }
+        catch { setTasks(prev); }
     };
 
-    // ── 3. POST /tasks  →  returns created task directly ────────────────────
-    const handleCreated = (newTask) => setTasks(t => [newTask, ...t]);
-
-    // ── 4. PUT /tasks/:id  →  returns updated task directly ─────────────────
+    const handleCreated = (newTask) => setTasks(t => {
+        // Guard against duplicate if socket/refetch already added it
+        if (t.some(x => x._id === newTask._id)) return t;
+        return [newTask, ...t];
+    });
     const handleUpdated = (updated) => setTasks(t => t.map(x => x._id === updated._id ? updated : x));
 
-    // ── 5. DELETE /tasks/:id  →  soft delete (isArchived = true) ────────────
     const handleDelete = async (taskId) => {
         if (!window.confirm('Archive this task?')) return;
-        setTasks(t => t.filter(x => x._id !== taskId)); // optimistic remove
-        try {
-            await api.delete(`/tasks/${taskId}`);
-        } catch {
-            fetchTasks(); // re-sync on failure
-        }
+        setTasks(t => t.filter(x => x._id !== taskId));
+        try { await api.delete(`/tasks/${taskId}`); }
+        catch { fetchTasks(); }
     };
 
-    // ── Group tasks by status (matches backend uppercase values) ─────────────
-    const tasksFor = (colId) => tasks.filter(t => t.status === colId);
+    const tasksFor = (colId) => tasks.filter(t => {
+        if (t.status !== colId) return false;
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        return t.title?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q);
+    });
 
-    // ── Render ────────────────────────────────────────────────────────────────
     if (!teamId) return (
-        <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
-            No team selected.
+        <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-slate-300" />
+            </div>
+            <p className="text-sm font-medium">No project selected</p>
+            <p className="text-xs text-slate-300">Please select a project to view the board</p>
         </div>
     );
 
     if (loading) return (
-        <div className="flex items-center justify-center h-48 gap-3 text-slate-400 text-sm">
-            <Loader2 className="w-5 h-5 animate-spin text-indigo-400" /> Loading tasks…
+        <div className="flex items-center justify-center h-64 gap-3 text-slate-400">
+            <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+            <span className="text-sm font-medium">Loading board…</span>
         </div>
     );
 
     if (error) return (
-        <div className="flex flex-col items-center justify-center h-48 gap-3">
-            <p className="text-red-500 text-sm flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4" /> {error}
-            </p>
+        <div className="flex flex-col items-center justify-center h-64 gap-3">
+            <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 px-4 py-3 rounded-xl border border-red-100">
+                <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+            </div>
             <button onClick={fetchTasks} className="px-4 py-2 text-sm font-semibold text-white bg-indigo-500 rounded-xl hover:bg-indigo-600 transition-colors">
                 Retry
             </button>
@@ -447,7 +442,9 @@ const KanbanBoard = () => {
 
     return (
         <>
-            <div className="flex gap-4 overflow-x-auto h-[calc(100vh-8rem)] pb-2 snap-x snap-mandatory">
+            <div className="flex gap-4 overflow-x-auto h-[calc(100vh-8rem)] pb-4 px-1"
+                style={{ scrollbarWidth: 'thin', scrollbarColor: '#e2e8f0 transparent' }}
+            >
                 {COLUMNS.map(col => (
                     <KanbanColumn
                         key={col.colId}
@@ -462,7 +459,6 @@ const KanbanBoard = () => {
                 ))}
             </div>
 
-            {/* Modals */}
             {addModal  && <AddTaskModal  columnStatus={addModal}  teamId={teamId} onClose={() => setAddModal(null)}  onCreated={handleCreated} />}
             {editModal && <EditTaskModal task={editModal}                          onClose={() => setEditModal(null)} onUpdated={handleUpdated} />}
             {histModal && <HistoryModal  taskId={histModal}                        onClose={() => setHistModal(null)} />}

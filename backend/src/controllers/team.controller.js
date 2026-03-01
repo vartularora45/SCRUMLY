@@ -99,7 +99,7 @@ export const deleteTeam = async (req, res) => {
 
 export const addMember = async (req, res) => {
   try {
-    const { userId, role = "MEMBER" } = req.body;
+    const { userId, email, role = "MEMBER" } = req.body;
 
     const team = await Team.findById(req.params.id);
     if (!team) return res.status(404).json({ message: "Team not found" });
@@ -107,27 +107,40 @@ export const addMember = async (req, res) => {
     if (team.owner.toString() !== req.user.id)
       return res.status(403).json({ message: "Only owner can add members" });
 
-    const userExists = await User.findById(userId);
-    if (!userExists)
-      return res.status(404).json({ message: "User not found" });
+    // ✅ Accept either userId OR email
+    let userToAdd = null;
+
+    if (userId) {
+      userToAdd = await User.findById(userId);
+    } else if (email) {
+      userToAdd = await User.findOne({ email: email.toLowerCase().trim() });
+    }
+
+    if (!userToAdd)
+      return res.status(404).json({ message: "User not found. Check the email and try again." });
 
     const alreadyMember = team.members.some(
-      (member) => member.user.toString() === userId
+      (member) => member.user.toString() === userToAdd._id.toString()
     );
 
     if (alreadyMember)
-      return res.status(400).json({ message: "User already a member" });
+      return res.status(400).json({ message: "User is already a member" });
 
     // ✅ Add to team
-    team.members.push({ user: userId, role });
+    team.members.push({ user: userToAdd._id, role });
     await team.save();
 
     // 🔥 Sync user → teams
-    await User.findByIdAndUpdate(userId, {
+    await User.findByIdAndUpdate(userToAdd._id, {
       $addToSet: { teams: team._id },
     });
 
-    res.json(team);
+    // Return populated team so frontend can update UI directly
+    const populated = await Team.findById(team._id)
+      .populate("members.user", "name email")
+      .populate("owner", "name email");
+
+    res.json({ team: populated });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

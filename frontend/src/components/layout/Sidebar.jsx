@@ -14,7 +14,7 @@ const Sidebar = () => {
     const navItems = [
         { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
         { path: '/tasks', icon: CheckSquare, label: 'My Tasks' },
-        { path: '/team', icon: Users, label: 'Team Board' },
+        { path: '/teams', icon: Users, label: 'NEW PROJECT'},
         { path: '/analytics', icon: BarChart2, label: 'Analytics' },
         { path: '/jira', icon: Trello, label: 'Jira Integration' },
         { path: '/settings', icon: Settings, label: 'Settings' },

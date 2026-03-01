@@ -12,7 +12,7 @@ import teamRoutes from './routes/team.routes.js';
 import taskRoutes from './routes/task.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import jiraRoutes from './routes/jira.routes.js';
-
+import inviteRoutes from './routes/invite.routes.js';
 dotenv.config();
 
 const app = express();
@@ -73,6 +73,7 @@ app.use('/api/teams', teamRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/integrations/jira', jiraRoutes);
+app.use('/api/invites', inviteRoutes);
 
 app.get('/health', (req, res) => {
   res.json({
