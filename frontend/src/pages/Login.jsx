@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, LogIn } from 'lucide-react';
 import axios from 'axios';
+import { GoogleLogin } from '@react-oauth/google';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Card from '../components/common/Card';
@@ -44,6 +45,29 @@ const Login = () => {
             setIsLoading(false);
         }
     };
+    const handleGoogleSuccess = async (credentialResponse) => {
+  try {
+    const { data } = await axios.post(
+      `${import.meta.env.VITE_BACKEND_URL}/auth/google`,
+      { credential: credentialResponse.credential }
+    );
+
+    login(data.user, data.token);
+    navigate("/");
+
+  } catch (error) {
+    setError(error.response?.data?.message || "Google login failed");
+  }
+
+  };
+  // Google Login Error Handler
+  const handleGoogleError = () => {
+    console.error('Google Login Failed');
+    setError("Google login failed. Please try again.");
+    setTimeout(() => {
+      setError("");
+    }, 3000);
+  };
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
@@ -101,6 +125,30 @@ const Login = () => {
                         Sign In <LogIn className="w-4 h-4 ml-2" />
                     </Button>
                 </form>
+                {/* Google Login Section */}
+       
+
+        {/* Divider */}
+        <div className="flex items-center mb-6">
+          <div className="flex-grow border-t border-gray-300"></div>
+          <span className="flex-shrink mx-4 text-gray-400">or</span>
+          <div className="flex-grow border-t border-gray-300"></div>
+        </div>
+         <div className="mb-4 text-center text-sm text-gray-600">
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              useOneTap={false}
+              theme="outline"
+              size="large"
+              text="signin_with"
+              shape="rectangular"
+              width="300"
+            />
+          </div>
+        </div>
+
 
                 <div className="mt-8 text-center">
                     <p className="text-sm text-slate-600">

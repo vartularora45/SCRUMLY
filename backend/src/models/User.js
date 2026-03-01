@@ -5,9 +5,6 @@ const userSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    trim: true,
-    minlength: 2,
-    maxlength: 50,
   },
 
   email: {
@@ -15,15 +12,27 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
     lowercase: true,
-    trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Invalid email'],
   },
 
   password: {
     type: String,
-    required: true,
     minlength: 6,
     select: false,
+    required: function () {
+      return this.provider === 'local';
+    }
+  },
+
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+
+  provider: {
+    type: String,
+    enum: ['local', 'google'],
+    default: 'local'
   },
 
   tokenVersion: {
@@ -34,27 +43,19 @@ const userSchema = new mongoose.Schema({
   teams: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Team',
-  }],
+  }]
 
 }, { timestamps: true });
 
-// Index for login speed
-userSchema.index({ email: 1 });
-
-// Hash password
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-
-  if (this.password.length < 6) {
-    throw new Error('Password too short');
-  }
+  if (!this.isModified('password') || this.provider !== 'local')
+    return next();
 
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
-// Compare password
 userSchema.methods.comparePassword = function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };

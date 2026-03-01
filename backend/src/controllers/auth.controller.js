@@ -157,6 +157,63 @@ export const login = async (req, res) => {
     });
   }
 };
+export const GoogleAuth = async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ message: "Google credential required" });
+    }
+
+    const response = await fetch(
+      `https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=${credential}`
+    );
+
+    if (!response.ok) {
+      return res.status(401).json({ message: "Invalid Google token" });
+    }
+
+    const googleUser = await response.json();
+
+    let user = await User.findOne({ googleId: googleUser.sub });
+
+    if (!user) {
+      const existingUser = await User.findOne({ email: googleUser.email });
+
+      if (existingUser) {
+        existingUser.googleId = googleUser.sub;
+        existingUser.provider = 'google';
+        user = await existingUser.save();
+      } else {
+        user = await User.create({
+          name: googleUser.name,
+          email: googleUser.email,
+          googleId: googleUser.sub,
+          provider: 'google'
+        });
+      }
+    }
+
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      },
+      token
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Google authentication failed" });
+  }
+};
 
 
 export const refreshToken = async (req, res) => {
