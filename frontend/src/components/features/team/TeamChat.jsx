@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Card from '../../common/Card';
 import Input from '../../common/Input';
 import Button from '../../common/Button';
-import { Send, Smile, Trash2, Sparkles, CheckCircle, XCircle, Edit3, ChevronDown } from 'lucide-react';
+import { Send, Smile, Trash2, Sparkles, CheckCircle, XCircle, Edit3, ChevronDown, FolderKanban } from 'lucide-react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import { useAuth } from '../../../context/AuthContext';
@@ -12,19 +11,19 @@ const api = axios.create({
 });
 
 // ─── AI Task Confirmation Modal ───────────────────────────────────────────────
-const AITaskModal = ({ aiResult, onConfirm, onReject }) => {
-    const [task, setTask] = useState({
-        title: aiResult?.task || aiResult?.title || '',
-        status: aiResult?.status || 'TODO',
-        description: aiResult?.description || '',
+const AITaskModal = ({ aiResult, task, onConfirm, onReject }) => {
+    const [editedTask, setEditedTask] = useState({
+        title:       task?.title || aiResult?.task || aiResult?.title || '',
+        status:      task?.status || aiResult?.status || 'TODO',
+        description: task?.description || aiResult?.description || '',
     });
 
     const statuses = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'];
     const statusColors = {
-        TODO: 'bg-slate-100 text-slate-600',
+        TODO:        'bg-slate-100 text-slate-600',
         IN_PROGRESS: 'bg-blue-100 text-blue-600',
-        DONE: 'bg-green-100 text-green-600',
-        BLOCKED: 'bg-red-100 text-red-600',
+        DONE:        'bg-green-100 text-green-600',
+        BLOCKED:     'bg-red-100 text-red-600',
     };
 
     return (
@@ -38,7 +37,7 @@ const AITaskModal = ({ aiResult, onConfirm, onReject }) => {
                     <div>
                         <h3 className="font-bold text-slate-800 text-lg">AI Detected a Task</h3>
                         <p className="text-xs text-slate-400">
-                            Confidence: {Math.round((aiResult?.confidence || 0) * 100)}% — Review before saving
+                            Confidence: {Math.round((aiResult?.confidence || 0) * 100)}% — Already saved, you can edit it
                         </p>
                     </div>
                 </div>
@@ -48,8 +47,8 @@ const AITaskModal = ({ aiResult, onConfirm, onReject }) => {
                     <div className="relative">
                         <input
                             type="text"
-                            value={task.title}
-                            onChange={(e) => setTask({ ...task, title: e.target.value })}
+                            value={editedTask.title}
+                            onChange={e => setEditedTask({ ...editedTask, title: e.target.value })}
                             className="w-full px-4 py-2.5 pr-10 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <Edit3 className="w-4 h-4 text-slate-300 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -60,18 +59,18 @@ const AITaskModal = ({ aiResult, onConfirm, onReject }) => {
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Status</label>
                     <div className="relative">
                         <select
-                            value={task.status}
-                            onChange={(e) => setTask({ ...task, status: e.target.value })}
+                            value={editedTask.status}
+                            onChange={e => setEditedTask({ ...editedTask, status: e.target.value })}
                             className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                         >
-                            {statuses.map((s) => (
+                            {statuses.map(s => (
                                 <option key={s} value={s}>{s.replace('_', ' ')}</option>
                             ))}
                         </select>
                         <ChevronDown className="w-4 h-4 text-slate-300 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
-                    <span className={`inline-block mt-2 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[task.status]}`}>
-                        {task.status.replace('_', ' ')}
+                    <span className={`inline-block mt-2 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[editedTask.status]}`}>
+                        {editedTask.status.replace('_', ' ')}
                     </span>
                 </div>
 
@@ -80,8 +79,8 @@ const AITaskModal = ({ aiResult, onConfirm, onReject }) => {
                         Description <span className="text-slate-300 font-normal normal-case">(optional)</span>
                     </label>
                     <textarea
-                        value={task.description}
-                        onChange={(e) => setTask({ ...task, description: e.target.value })}
+                        value={editedTask.description}
+                        onChange={e => setEditedTask({ ...editedTask, description: e.target.value })}
                         placeholder="Add more context..."
                         rows={2}
                         className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -93,14 +92,14 @@ const AITaskModal = ({ aiResult, onConfirm, onReject }) => {
                         onClick={onReject}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors font-medium"
                     >
-                        <XCircle className="w-4 h-4 text-red-400" /> Skip Task
+                        <XCircle className="w-4 h-4 text-red-400" /> Dismiss
                     </button>
                     <button
-                        onClick={() => onConfirm(task)}
-                        disabled={!task.title.trim()}
+                        onClick={() => onConfirm(editedTask)}
+                        disabled={!editedTask.title.trim()}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl text-sm text-white transition-colors font-medium shadow-lg shadow-blue-200"
                     >
-                        <CheckCircle className="w-4 h-4" /> Create Task
+                        <CheckCircle className="w-4 h-4" /> Looks Good ✓
                     </button>
                 </div>
             </div>
@@ -109,99 +108,99 @@ const AITaskModal = ({ aiResult, onConfirm, onReject }) => {
 };
 
 // ─── Chat Message ─────────────────────────────────────────────────────────────
-const ChatMessage = ({ message, isMe, onDelete }) => {
-    return (
-        <div className={`flex gap-3 group ${isMe ? 'flex-row-reverse' : ''}`}>
-            <div className="flex-shrink-0">
-                <img
-                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${message.sender?.name || message.user || 'user'}`}
-                    alt={message.sender?.name || message.user}
-                    className="w-8 h-8 rounded-full border border-slate-200"
-                />
+const ChatMessage = ({ message, isMe, onDelete }) => (
+    <div className={`flex gap-2.5 group ${isMe ? 'flex-row-reverse' : ''}`}>
+        <img
+            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${message.sender?.name || message.user || 'user'}`}
+            alt="avatar"
+            className="w-7 h-7 rounded-full border border-slate-200 shrink-0 mt-1"
+        />
+        <div className={`max-w-[78%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+            {!isMe && (
+                <span className="text-xs text-slate-500 mb-1 ml-1 font-medium">
+                    {message.sender?.name || message.user}
+                </span>
+            )}
+            <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed
+                ${isMe
+                    ? 'bg-blue-600 text-white rounded-br-sm'
+                    : 'bg-slate-100 text-slate-800 rounded-bl-sm'
+                }`}>
+                {message.content || message.text}
             </div>
-            <div className={`max-w-[80%] ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
-                {!isMe && (
-                    <span className="text-xs text-slate-500 mb-1 ml-1">{message.sender?.name || message.user}</span>
-                )}
-                <div className={`p-3 rounded-2xl text-sm ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-bl-none'}`}>
-                    {message.content || message.text}
+            {message.aiResultSnapshot && (
+                <div className="flex items-center gap-1 mt-1.5 px-2.5 py-1 bg-purple-50 border border-purple-100 rounded-full">
+                    <Sparkles className="w-3 h-3 text-purple-400" />
+                    <span className="text-xs text-purple-500 font-medium">AI task created</span>
                 </div>
-                {message.aiResultSnapshot && (
-                    <div className="flex items-center gap-1 mt-1 px-2 py-0.5 bg-purple-50 border border-purple-100 rounded-full">
-                        <Sparkles className="w-3 h-3 text-purple-400" />
-                        <span className="text-xs text-purple-500">AI task created</span>
-                    </div>
+            )}
+            <div className="flex items-center gap-2 mt-1 px-1">
+                <span className="text-xs text-slate-400">
+                    {message.createdAt
+                        ? new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : message.time || ''}
+                </span>
+                {isMe && (
+                    <button
+                        onClick={() => onDelete(message._id || message.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-red-400"
+                    >
+                        <Trash2 className="w-3 h-3" />
+                    </button>
                 )}
-                <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-400">
-                        {message.createdAt
-                            ? new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                            : message.time || ''}
-                    </span>
-                    {isMe && (
-                        <button
-                            onClick={() => onDelete(message._id || message.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-red-400"
-                        >
-                            <Trash2 className="w-3 h-3" />
-                        </button>
-                    )}
-                </div>
             </div>
         </div>
-    );
-};
+    </div>
+);
 
 // ─── Main TeamChat ────────────────────────────────────────────────────────────
 const TeamChat = ({ teamId }) => {
-    const { token, user: currentUser } = useAuth();
-    const [messages, setMessages] = useState([]);
-    const [inputValue, setInputValue] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [isSending, setIsSending] = useState(false);
-    const [error, setError] = useState('');
-    const [pendingAI, setPendingAI] = useState(null);
+    const { token, user: currentUser, activeTeam } = useAuth();
+    const [messages,    setMessages]    = useState([]);
+    const [inputValue,  setInputValue]  = useState('');
+    const [isLoading,   setIsLoading]   = useState(false);
+    const [isSending,   setIsSending]   = useState(false);
+    const [error,       setError]       = useState('');
+    const [pendingAI,   setPendingAI]   = useState(null); // { aiResult, task }
     const [onlineCount, setOnlineCount] = useState(1);
     const socketRef = useRef(null);
     const bottomRef = useRef(null);
 
     const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
 
-    // ── Socket.IO setup ──
+    // ── Socket.IO ────────────────────────────────────────────────────────────
     useEffect(() => {
         if (!teamId || !token) return;
+
+        if (socketRef.current) socketRef.current.disconnect();
 
         const socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
             auth: { token },
         });
         socketRef.current = socket;
 
-        // Join team room
         socket.emit('join_team', teamId);
 
-        // New message from any team member
         socket.on('new_message', (message) => {
-            // ✅ Apna message skip karo — axios se already add ho chuka hai
-            if (message.senderId === currentUser?._id?.toString()) return;
+            // Skip messages from self — sender already handled via HTTP response
+            if (message.author?._id === currentUser?._id?.toString()) return;
+            if (message.author === currentUser?._id?.toString()) return;
 
-            setMessages((prev) => {
-                const exists = prev.some(
-                    (m) => (m._id || m.id)?.toString() === message._id?.toString()
-                );
+            setMessages(prev => {
+                const exists = prev.some(m => (m._id || m.id)?.toString() === message._id?.toString());
                 if (exists) return prev;
                 return [...prev, message];
             });
+
+            // ✅ Socket se sirf OTHER users ke AI tasks add karo
+            // Apna task HTTP response se already add ho chuka hai
         });
 
-        // Message deleted by someone
         socket.on('message_deleted', (messageId) => {
-            setMessages((prev) => prev.filter((m) => (m._id || m.id)?.toString() !== messageId?.toString()));
+            setMessages(prev => prev.filter(m => (m._id || m.id)?.toString() !== messageId?.toString()));
         });
 
-        // Online users count
-        socket.on('team_online_count', (count) => {
-            setOnlineCount(count);
-        });
+        socket.on('team_online_count', (count) => setOnlineCount(count));
 
         return () => {
             socket.emit('leave_team', teamId);
@@ -209,13 +208,14 @@ const TeamChat = ({ teamId }) => {
         };
     }, [teamId, token]);
 
-    // ── Fetch initial messages ──
+    // ── Fetch messages ───────────────────────────────────────────────────────
     useEffect(() => {
         if (!teamId || !token) return;
+        setMessages([]);
         fetchMessages();
     }, [teamId, token]);
 
-    // ── Auto scroll ──
+    // ── Auto scroll ──────────────────────────────────────────────────────────
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -226,7 +226,7 @@ const TeamChat = ({ teamId }) => {
         try {
             const { data } = await api.get(`/messages/${teamId}`, authHeaders);
             setMessages(data.data?.messages || []);
-        } catch (err) {
+        } catch {
             setError('Failed to load messages.');
         } finally {
             setIsLoading(false);
@@ -239,14 +239,14 @@ const TeamChat = ({ teamId }) => {
 
         const tempId = `temp-${Date.now()}`;
         const tempMessage = {
-            id: tempId,
-            user: currentUser?.name || 'You',
+            id:      tempId,
+            user:    currentUser?.name || 'You',
             content: inputValue,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isMe: true,
+            time:    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isMe:    true,
         };
 
-        setMessages((prev) => [...prev, tempMessage]);
+        setMessages(prev => [...prev, tempMessage]);
         setInputValue('');
         setIsSending(true);
 
@@ -254,47 +254,50 @@ const TeamChat = ({ teamId }) => {
             const { data } = await api.post('/messages', { content: tempMessage.content, teamId }, authHeaders);
             const newMsg = data.data?.message || data.message || data;
 
-            // Replace temp with real — socket will broadcast to others
-            setMessages((prev) =>
-                prev.map((msg) => (msg.id === tempId ? { ...newMsg, isMe: true } : msg))
-            );
+            // Replace temp message with real one
+            setMessages(prev => prev.map(msg =>
+                msg.id === tempId ? { ...newMsg, isMe: true } : msg
+            ));
 
-            // AI task detected?
+            // ✅ Backend ne task already banaya — sirf review modal dikhao
+            // handleTaskConfirm mein DOBARA POST /tasks NAHI karenge
             if (data.data?.aiResult && data.data?.task) {
-                setPendingAI({ aiResult: data.data.aiResult, task: data.data.task });
+                setPendingAI({
+                    aiResult: data.data.aiResult,
+                    task:     data.data.task, // already created task
+                });
             }
-        } catch (err) {
-            setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
+        } catch {
+            setMessages(prev => prev.filter(msg => msg.id !== tempId));
             setError('Failed to send message.');
         } finally {
             setIsSending(false);
         }
     };
 
-    const handleTaskConfirm = async (editedTask) => {
+    // ✅ FIX: Sirf system message dikhao — NO api.post('/tasks') here
+    // Backend ne task already bana diya tha createMessage mein
+    const handleTaskConfirm = (editedTask) => {
         setPendingAI(null);
-        try {
-            // TODO: await api.post('/tasks', { ...editedTask, teamId }, authHeaders);
-            console.log('✅ Task create:', editedTask);
-            setMessages((prev) => [...prev, {
-                id: `system-${Date.now()}`,
-                content: `✅ Task created: "${editedTask.title}" [${editedTask.status}]`,
-                isSystem: true,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            }]);
-        } catch (err) {
-            console.error('Task create failed:', err);
-        }
+        // Just show a confirmation message in chat
+        setMessages(prev => [...prev, {
+            id:       `system-${Date.now()}`,
+            content:  `✅ Task saved: "${editedTask.title}" [${editedTask.status.replace('_', ' ')}]`,
+            isSystem: true,
+            time:     new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }]);
     };
 
-    const handleTaskReject = () => setPendingAI(null);
+    const handleTaskReject = () => {
+        setPendingAI(null);
+    };
 
     const handleDelete = async (messageId) => {
         if (!messageId || String(messageId).startsWith('temp-')) return;
-        setMessages((prev) => prev.filter((msg) => (msg._id || msg.id)?.toString() !== messageId?.toString()));
+        setMessages(prev => prev.filter(msg => (msg._id || msg.id)?.toString() !== messageId?.toString()));
         try {
             await api.delete(`/messages/${messageId}`, authHeaders);
-        } catch (err) {
+        } catch {
             fetchMessages();
         }
     };
@@ -304,31 +307,56 @@ const TeamChat = ({ teamId }) => {
             {pendingAI && (
                 <AITaskModal
                     aiResult={pendingAI.aiResult}
+                    task={pendingAI.task}
                     onConfirm={handleTaskConfirm}
                     onReject={handleTaskReject}
                 />
             )}
 
-            <Card className="h-[calc(100vh-8rem)] flex flex-col bg-white border-slate-200">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800">Team Chat</h3>
-                    <span className="text-xs font-medium text-green-600 flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+                {/* Header */}
+                <div className="shrink-0 px-4 py-3.5 border-b border-slate-100 flex items-center justify-between bg-white">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center">
+                            <FolderKanban className="w-4 h-4 text-blue-500" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-800 text-sm leading-tight">Project Chat</h3>
+                            <p className="text-xs text-slate-400 leading-tight truncate max-w-[140px]">
+                                {activeTeam?.name || 'Select a project'}
+                            </p>
+                        </div>
+                    </div>
+                    <span className="text-xs font-medium text-emerald-600 flex items-center gap-1.5 shrink-0">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                         {onlineCount} Online
                     </span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 custom-scrollbar min-h-0">
                     {isLoading && (
-                        <div className="text-center text-slate-400 text-sm py-8">Loading messages...</div>
+                        <div className="flex items-center justify-center py-12">
+                            <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+                        </div>
                     )}
-                    {!isLoading && messages.length === 0 && (
-                        <div className="text-center text-slate-400 text-sm py-8">No messages yet. Say hello! 👋</div>
+                    {!isLoading && !teamId && (
+                        <div className="flex flex-col items-center justify-center py-12 gap-2">
+                            <FolderKanban className="w-8 h-8 text-slate-200" />
+                            <p className="text-slate-400 text-sm text-center">Select a project to see its chat</p>
+                        </div>
                     )}
-                    {messages.map((msg) =>
+                    {!isLoading && teamId && messages.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-12 gap-2">
+                            <span className="text-2xl">👋</span>
+                            <p className="text-slate-400 text-sm">No messages yet. Say hello!</p>
+                        </div>
+                    )}
+                    {messages.map(msg =>
                         msg.isSystem ? (
                             <div key={msg.id} className="flex justify-center">
-                                <span className="px-3 py-1 bg-green-50 border border-green-100 rounded-full text-xs text-green-600">
+                                <span className="px-3 py-1 bg-emerald-50 border border-emerald-100 rounded-full text-xs text-emerald-600 font-medium">
                                     {msg.content}
                                 </span>
                             </div>
@@ -341,35 +369,43 @@ const TeamChat = ({ teamId }) => {
                             />
                         )
                     )}
-                    {error && <div className="text-center text-red-400 text-xs">{error}</div>}
+                    {error && (
+                        <div className="text-center text-red-400 text-xs bg-red-50 rounded-lg py-2">{error}</div>
+                    )}
                     <div ref={bottomRef} />
                 </div>
 
-                <div className="p-4 border-t border-slate-100 bg-slate-50">
-                    <form onSubmit={handleSend} className="flex gap-2">
+                {/* Input */}
+                <div className="shrink-0 px-3 py-3 border-t border-slate-100 bg-slate-50/80">
+                    <form onSubmit={handleSend} className="flex gap-2 items-center">
                         <div className="relative flex-1">
-                            <Input
+                            <input
+                                className="w-full pl-4 pr-10 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 transition-colors"
                                 placeholder="Type a message..."
                                 value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                                className="pr-10"
+                                onChange={e => setInputValue(e.target.value)}
+                                disabled={!teamId}
                             />
-                            <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                                <Smile className="w-5 h-5" />
+                            <button
+                                type="button"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <Smile className="w-4 h-4" />
                             </button>
                         </div>
-                        <Button
+                        <button
                             type="submit"
-                            size="sm"
-                            className="px-3 rounded-lg aspect-square flex items-center justify-center"
-                            isLoading={isSending}
-                            disabled={!inputValue.trim() || isSending}
+                            disabled={!inputValue.trim() || isSending || !teamId}
+                            className="w-10 h-10 shrink-0 flex items-center justify-center bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
                         >
-                            <Send className="w-4 h-4" />
-                        </Button>
+                            {isSending
+                                ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                : <Send className="w-4 h-4" />
+                            }
+                        </button>
                     </form>
                 </div>
-            </Card>
+            </div>
         </>
     );
 };

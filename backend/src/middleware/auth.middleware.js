@@ -1,60 +1,58 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
+// 🔐 Protect Routes
 export const protect = async (req, res, next) => {
   try {
-    let token;
+    const authHeader = req.headers.authorization;
 
-    // Check for token in Authorization header
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (!token) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
         message: 'Not authorized, no token provided',
       });
     }
 
-    try {
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const token = authHeader.split(' ')[1];
 
-      
-      req.user = await User.findById(decoded.id).select('-password');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not found',
-        });
-      }
+    const user = await User.findById(decoded.id).select('-password');
 
-      next();
-    } catch (error) {
+    if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Not authorized, token invalid or expired',
+        message: 'User not found',
       });
     }
+
+    req.user = user;
+
+    next();
   } catch (error) {
-    return res.status(500).json({
+    return res.status(401).json({
       success: false,
-      message: 'Server error in authentication',
+      message: 'Not authorized, token invalid or expired',
     });
   }
 };
 
-// Check if user is team member
+// 👥 Check Team Membership
 export const checkTeamMembership = async (req, res, next) => {
   try {
-    const { teamId } = req.params.teamId ? req.params : req.body;
+    const teamId = req.params.teamId || req.body.teamId;
 
     if (!teamId) {
       return res.status(400).json({
         success: false,
         message: 'Team ID is required',
+      });
+    }
+
+    if (!req.user.teams || req.user.teams.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'User is not part of any team',
       });
     }
 

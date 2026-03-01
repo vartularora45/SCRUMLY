@@ -3,20 +3,20 @@ import { createContext, useContext, useState, useEffect } from "react";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-  const [teams, setTeams] = useState([]);
+  const [user, setUser]             = useState(null);
+  const [token, setToken]           = useState(null);
+  const [teams, setTeams]           = useState([]);
   const [activeTeam, setActiveTeam] = useState(null);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    const storedToken = localStorage.getItem("token");
-    const storedTeams = localStorage.getItem("teams");
+    const storedUser       = localStorage.getItem("user");
+    const storedToken      = localStorage.getItem("token");
+    const storedTeams      = localStorage.getItem("teams");
     const storedActiveTeam = localStorage.getItem("activeTeam");
 
-    if (storedUser) setUser(JSON.parse(storedUser));
-    if (storedToken) setToken(storedToken);
-    if (storedTeams) setTeams(JSON.parse(storedTeams));
+    if (storedUser)       setUser(JSON.parse(storedUser));
+    if (storedToken)      setToken(storedToken);
+    if (storedTeams)      setTeams(JSON.parse(storedTeams));
     if (storedActiveTeam) setActiveTeam(JSON.parse(storedActiveTeam));
   }, []);
 
@@ -25,7 +25,6 @@ export const AuthProvider = ({ children }) => {
     setToken(accessToken);
 
     const userTeams = userData?.teams || [];
-
     setTeams(userTeams);
     setActiveTeam(userTeams[0] || null);
 
@@ -42,13 +41,23 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setTeams([]);
     setActiveTeam(null);
-
     localStorage.clear();
   };
 
+  // switchTeam — localStorage bhi update karta hai
   const switchTeam = (team) => {
     setActiveTeam(team);
     localStorage.setItem("activeTeam", JSON.stringify(team));
+  };
+
+  // setActiveTeam wrapper — localStorage sync ke saath
+  const setActiveTeamWithStorage = (team) => {
+    setActiveTeam(team);
+    if (team) {
+      localStorage.setItem("activeTeam", JSON.stringify(team));
+    } else {
+      localStorage.removeItem("activeTeam");
+    }
   };
 
   return (
@@ -61,6 +70,8 @@ export const AuthProvider = ({ children }) => {
         login,
         logout,
         switchTeam,
+        // ✅ setActiveTeam expose kiya — ProjectsPage/TeamBoard use karengi
+        setActiveTeam: setActiveTeamWithStorage,
       }}
     >
       {children}
