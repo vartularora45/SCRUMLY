@@ -11,6 +11,7 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import TeamsPage from './pages/TeamPage.jsx';
+import UserProtect from './protect/UserProtect.jsx';
 
 import { AuthProvider } from './context/AuthContext.jsx';
 
@@ -19,15 +20,20 @@ function App() {
     <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
       <AuthProvider>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/tasks" element={<MyTasks />} />
-          <Route path="/team" element={<TeamBoard />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/jira" element={<JiraIntegration />} />
+          <Route path="/" element={<UserProtect><Dashboard /></UserProtect>} />
+          <Route path="/tasks" element={<UserProtect><MyTasks /></UserProtect>} />
+          <Route path="/team" element={<UserProtect><TeamBoard /></UserProtect>} />
+          <Route path="/analytics" element={<UserProtect><Analytics /></UserProtect>} />
+          <Route path="/jira" element={<UserProtect><JiraIntegration /></UserProtect>} />
+          <Route path="/integrations" element={<UserProtect><JiraIntegration /></UserProtect>} /> {/* ← added */}
           <Route path="/settings" element={<Settings />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/teams" element={<TeamsPage />} />
+          <Route path="/teams" element={
+            <UserProtect >
+              <TeamsPage />
+            </UserProtect>
+          } />
         </Routes>
       </AuthProvider>
     </GoogleOAuthProvider>

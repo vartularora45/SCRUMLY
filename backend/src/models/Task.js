@@ -12,14 +12,14 @@ const taskSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+
   completedAt: {
-  type: Date,
-}
-,
+    type: Date,
+  },
 
   status: {
     type: String,
-    enum: ['TODO', 'IN_PROGRESS', 'DONE'],
+    enum: ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'],
     default: 'TODO',
   },
 
@@ -50,7 +50,6 @@ const taskSchema = new mongoose.Schema({
     type: String,
     enum: ['Low', 'Medium', 'High'],
     default: 'Medium',
-    
   },
 
   aiGenerated: {
@@ -76,11 +75,27 @@ const taskSchema = new mongoose.Schema({
   isArchived: {
     type: Boolean,
     default: false,
-  }
+  },
+
+  // ── Jira Sync Fields ──────────────────────────────────────
+  jiraIssueKey: {
+    type: String,
+    default: null,   // e.g. "KAN-5"
+  },
+  jiraSynced: {
+    type: Boolean,
+    default: false,
+  },
+  source: {
+    type: String,
+    enum: ['scrumly', 'jira'],
+    default: 'scrumly',
+  },
 
 }, { timestamps: true });
 
 // Board performance
 taskSchema.index({ teamId: 1, status: 1, columnOrder: 1 });
+taskSchema.index({ jiraIssueKey: 1 });
 
 export default mongoose.model('Task', taskSchema);

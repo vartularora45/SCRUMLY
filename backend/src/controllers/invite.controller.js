@@ -3,6 +3,7 @@ import Team   from '../models/Team.js';
 import User   from '../models/User.js';
 import { sendOTPEmail } from '../services/email.service.js';
 import { io } from '../server.js';
+import bcrypt from 'bcryptjs';
 
 /* =========================================================
    STEP 1 — Send OTP to invitee's email
@@ -127,5 +128,155 @@ export const verifyInviteOTP = async (req, res) => {
   } catch (err) {
     console.error('VERIFY INVITE OTP ERROR:', err);
     res.status(500).json({ message: err.message });
+  }
+};
+
+/* =========================================================
+   FORGOT PASSWORD — STEP 1: OTP bhejo
+   POST /api/invites/forgot-password
+   Body: { email }
+========================================================= */
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email)
+      return res.status(400).json({ message: 'Email is required' });
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user)
+      return res.status(404).json({ message: 'No account found with this email.' });
+
+    // Purane pending password-reset OTPs expire karo
+    await Invite.updateMany(
+      { email: user.email, teamId: null, status: 'PENDING' },
+      { status: 'EXPIRED' }
+    );
+
+    const otp          = Invite.generateOTP();
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+
+    // Invite model reuse — teamId/invitedBy dummy values se avoid karte hain
+    // isliye ek placeholder use karo (apna server userId ya koi fixed ObjectId)
+    const SYSTEM_ID = user._id; // self-reference — sirf placeholder
+
+    await Invite.create({
+      teamId:        user._id,       // placeholder (required field)
+      invitedBy:     user._id,       // placeholder (required field)
+      invitedUserId: user._id,
+      email:         user.email,
+      otp,
+      otpExpiresAt,
+      expiresAt:     otpExpiresAt,
+      status:        'PENDING',
+      role:          'MEMBER',
+    });
+
+    await sendOTPEmail({
+      toEmail:     user.email,
+      inviterName: 'Scrumly',
+      teamName:    'Password Reset',
+      otp,
+    });
+
+    return res.status(200).json({ message: 'OTP sent to your email.' });
+
+  } catch (err) {
+    console.error('FORGOT PASSWORD ERROR:', err);
+    return res.status(500).json({ message: 'Server error. Please try again.' });
+  }
+};
+
+/* =========================================================
+   FORGOT PASSWORD — STEP 2: OTP verify karo
+   POST /api/invites/verify-reset-otp
+   Body: { email, otp }
+========================================================= */
+export const verifyResetOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp)
+      return res.status(400).json({ message: 'Email and OTP are required' });
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user)
+      return res.status(404).json({ message: 'No account found with this email.' });
+
+    // Latest pending OTP dhundo
+    const record = await Invite.findOne({
+      invitedUserId: user._id,
+      status:        'PENDING',
+    }).sort({ createdAt: -1 });
+
+    if (!record)
+      return res.status(400).json({ message: 'OTP not found or already expired.' });
+
+    if (record.otpExpiresAt < new Date()) {
+      record.status = 'EXPIRED';
+      await record.save();
+      return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
+    }
+
+    if (record.otp !== otp.trim())
+      return res.status(400).json({ message: 'Invalid OTP. Please try again.' });
+
+    // Verified mark karo — ACCEPTED status use karenge
+    record.status = 'ACCEPTED';
+    await record.save();
+
+    return res.status(200).json({ message: 'OTP verified successfully.' });
+
+  } catch (err) {
+    console.error('VERIFY RESET OTP ERROR:', err);
+    return res.status(500).json({ message: 'Server error. Please try again.' });
+  }
+};
+
+/* =========================================================
+   FORGOT PASSWORD — STEP 3: Naya password set karo
+   POST /api/invites/reset-password
+   Body: { email, otp, newPassword }
+========================================================= */
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword)
+      return res.status(400).json({ message: 'Email, OTP and new password are required' });
+
+    if (newPassword.length < 6)
+      return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user)
+      return res.status(404).json({ message: 'No account found with this email.' });
+
+    // ACCEPTED record dhundo (verified OTP)
+    const record = await Invite.findOne({
+      invitedUserId: user._id,
+      otp:           otp.trim(),
+      status:        'ACCEPTED',
+    }).sort({ createdAt: -1 });
+
+    if (!record)
+      return res.status(400).json({ message: 'OTP not verified or session expired. Please start over.' });
+
+    // Expiry double-check
+    if (record.otpExpiresAt < new Date()) {
+      record.status = 'EXPIRED';
+      await record.save();
+      return res.status(400).json({ message: 'Session expired. Please start over.' });
+    }
+
+    // Password hash karke update karo
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await User.findByIdAndUpdate(user._id, { password: hashedPassword });
+
+    // Record delete karo — one-time use
+    await Invite.deleteOne({ _id: record._id });
+
+    return res.status(200).json({ message: 'Password reset successfully. Please login.' });
+
+  } catch (err) {
+    console.error('RESET PASSWORD ERROR:', err);
+    return res.status(500).json({ message: 'Server error. Please try again.' });
   }
 };
