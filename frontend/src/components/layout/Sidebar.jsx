@@ -18,14 +18,14 @@ const NAV = [
   { path: '/settings',  icon: Settings,        label: 'Settings'              },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed, setCollapsed, mobileMenuOpen, setMobileMenuOpen }) {
   const { user, logout, teams, activeTeam, switchTeam } = useAuth();
   const navigate    = useNavigate();
   const toast       = useToast();
   const [teamOpen,    setTeamOpen]    = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [loggingOut,  setLoggingOut]  = useState(false);
-  const [collapsed,   setCollapsed]   = useState(false);
+
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -44,10 +44,20 @@ export default function Sidebar() {
 
   return (
     <>
+      {/* ── Mobile Overlay ────────────────────────────────────────── */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 z-30 bg-black/50 md:hidden animate-fade-in" 
+          onClick={() => setMobileMenuOpen(false)} 
+        />
+      )}
+
       {/* ── Sidebar Shell ────────────────────────────────────────── */}
       <aside
-        className={`fixed left-0 top-0 h-screen flex flex-col z-20 sidebar-shell transition-all duration-300 scrollbar-dark
-          ${collapsed ? 'w-[68px]' : 'w-64'}`}
+        className={`fixed left-0 top-0 h-screen flex flex-col z-40 sidebar-shell transition-all duration-300 scrollbar-dark
+          w-64 ${collapsed ? 'md:w-[68px]' : 'md:w-64'}
+          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}
       >
 
         {/* Logo + collapse toggle */}
@@ -157,8 +167,9 @@ export default function Sidebar() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150
                 ${isActive ? 'nav-active' : 'nav-inactive'}
-                ${collapsed ? 'justify-center' : ''}`
+                ${collapsed ? 'md:justify-center' : ''}`
               }
+              onClick={() => setMobileMenuOpen(false)}
             >
               {({ isActive }) => (
                 <>
