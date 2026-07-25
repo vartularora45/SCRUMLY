@@ -22,6 +22,8 @@ import inviteRoutes   from './routes/invite.routes.js';
 import intelligenceRoutes from './routes/intelligence.routes.js';
 import moduleRoutes from './routes/module.routes.js';
 import alertRoutes from './routes/alert.routes.js';
+import { protect } from './middleware/auth.middleware.js';
+import { getDashboardDirect } from './controllers/intelligence.controller.js';
 
 dotenv.config();
 
@@ -31,7 +33,7 @@ const app = express();
 // FIX: Support multiple origins from env (was using broken || short-circuit logic)
 // Deduplicate origins
 const allowedOrigins = [...new Set(
-  (process.env.FRONTEND_URL || '')
+  (process.env.FRONTEND_URL || process.env.CLIENT_URL || '')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean)
@@ -95,29 +97,47 @@ connectDB();
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
 app.use('/api/', apiLimiter);
 app.use('/api/auth/', authLimiter);
+app.use('/auth/', authLimiter);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth',      authRoutes);
+app.use('/auth',          authRoutes);
 app.use('/api/messages',  messageRoutes);
+app.use('/messages',      messageRoutes);
 app.use('/api/board',     boardRoutes);
+app.use('/board',         boardRoutes);
 app.use('/api/teams',     teamRoutes);
+app.use('/teams',         teamRoutes);
 app.use('/api/tasks',     taskRoutes);
+app.use('/tasks',         taskRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/analytics',     analyticsRoutes);
 app.use('/api/jira',      jiraRoutes);
+app.use('/jira',          jiraRoutes);
 app.use('/api/invites',   inviteRoutes);
+app.use('/invites',       inviteRoutes);
 app.use('/api/intelligence', intelligenceRoutes);
-app.use('/api/modules', moduleRoutes);
-app.use('/api/alerts', alertRoutes);
+app.use('/intelligence',  intelligenceRoutes);
+app.use('/api/modules',   moduleRoutes);
+app.use('/modules',       moduleRoutes);
+app.use('/api/alerts',    alertRoutes);
+app.use('/alerts',        alertRoutes);
+
+// Direct dashboard endpoints
+app.get('/api/dashboard', protect, getDashboardDirect);
+app.get('/dashboard',     protect, getDashboardDirect);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
-app.get('/health', (req, res) => {
+const healthHandler = (req, res) => {
   res.json({
     success:   true,
     message:   'Scrumlyn API is running',
     timestamp: new Date().toISOString(),
     env:       process.env.NODE_ENV || 'development',
   });
-});
+};
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // ─── 404 Handler ──────────────────────────────────────────────────────────────
 app.use((req, res) => {

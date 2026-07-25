@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+const rawUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
+const normalizedBaseURL = rawUrl.endsWith('/api') ? rawUrl : `${rawUrl.replace(/\/$/, '')}/api`;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_BACKEND_URL,
+  baseURL: normalizedBaseURL,
   withCredentials: true,
 });
 
@@ -35,7 +38,7 @@ api.interceptors.response.use(
       try {
         // Attempt to get a new access token (backend uses HttpOnly cookie for refresh token)
         const { data } = await axios.post(
-          `${import.meta.env.VITE_BACKEND_URL}/auth/refresh`,
+          `${normalizedBaseURL}/auth/refresh`,
           {},
           { withCredentials: true }
         );

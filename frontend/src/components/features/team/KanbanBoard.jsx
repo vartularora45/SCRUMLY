@@ -546,7 +546,8 @@ const KanbanBoard = ({ searchQuery = '' }) => {
         if (!teamId) return;
 
         // Initialize Socket
-        const socket = io(import.meta.env.VITE_BACKEND_URL, {
+        const socketUrl = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/api$/, '');
+        const socket = io(socketUrl, {
             withCredentials: true,
             transports: ['websocket', 'polling']
         });

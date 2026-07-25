@@ -22,6 +22,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/"            element={<UserProtect><Dashboard /></UserProtect>} />
+          <Route path="/dashboard"   element={<UserProtect><Dashboard /></UserProtect>} />
           <Route path="/tasks"       element={<UserProtect><MyTasks /></UserProtect>} />
           <Route path="/team"        element={<UserProtect><TeamBoard /></UserProtect>} />
           <Route path="/analytics"   element={<UserProtect><Analytics /></UserProtect>} />

@@ -3,9 +3,25 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+let apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || process.env.GEMINI_API_KEY || process.env.GEMINI_KEY || '';
+let baseURL = 'https://api.groq.com/openai/v1';
+let defaultModel = 'llama-3.3-70b-versatile';
+
+if (!process.env.GROQ_API_KEY) {
+  if (process.env.OPENAI_API_KEY || process.env.OPENAI_KEY) {
+    apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY;
+    baseURL = 'https://api.openai.com/v1';
+    defaultModel = 'gpt-4o-mini';
+  } else if (process.env.GEMINI_API_KEY || process.env.GEMINI_KEY) {
+    apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_KEY;
+    baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
+    defaultModel = 'gemini-1.5-flash';
+  }
+}
+
 const openai = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,   // 🔥 Change key
-  baseURL: 'https://api.groq.com/openai/v1', // 🔥 Groq endpoint
+  apiKey,
+  baseURL,
 });
 
 const SYSTEM_PROMPT = `You are a task extraction AI for a Scrum board. Analyze team messages and extract actionable tasks.
@@ -40,9 +56,10 @@ export const parseMessageWithAI = async (
   content,
   model = 'llama-3.3-70b-versatile' // 🔥 Groq default model
 ) => {
+  const activeModel = model === 'llama-3.3-70b-versatile' ? defaultModel : model;
   try {
     const completion = await openai.chat.completions.create({
-      model,
+      model: activeModel,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content }
@@ -97,8 +114,9 @@ export const parseMultipleMessages = async (
   messages,
   model = 'llama-3.3-70b-versatile'
 ) => {
+  const activeModel = model === 'llama-3.3-70b-versatile' ? defaultModel : model;
   const results = await Promise.allSettled(
-    messages.map(msg => parseMessageWithAI(msg, model))
+    messages.map(msg => parseMessageWithAI(msg, activeModel))
   );
 
   return results.map((result, index) => ({

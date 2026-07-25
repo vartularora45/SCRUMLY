@@ -143,6 +143,11 @@ export const GoogleAuth = async (req, res) => {
 
     const googleUser = await response.json();
 
+    const configuredClientId = process.env.GOOGLE_CLIENT_ID || process.env.googleClientId;
+    if (configuredClientId && googleUser.aud !== configuredClientId) {
+      return res.status(401).json({ success: false, message: 'Google client ID mismatch' });
+    }
+
     let user = await User.findOne({ googleId: googleUser.sub }).populate('teams', 'name');
 
     if (!user) {
