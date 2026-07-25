@@ -164,91 +164,27 @@ const Avatar = ({ seed }) => (
   />
 );
 
-const OTPModal = ({ inviteId, inviteeName, onVerified, onClose, api }) => {
-  const [otp,     setOtp]     = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
-
-  const handleVerify = async () => {
-    if (otp.length !== 6) return setError('Enter the 6-digit code');
-    setLoading(true); setError('');
-    try {
-      const res = await api.post('/invites/verify-otp', { inviteId, otp });
-      onVerified(res.data.team);
-    } catch (e) {
-      setError(e.response?.data?.message || 'Verification failed');
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" style={{ boxShadow: '0 32px 64px -12px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
-        <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-violet-500" />
-        <div className="p-6">
-          <div className="flex items-start justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
-                <Mail className="w-5 h-5 text-indigo-500" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-800 leading-tight">Enter OTP</h3>
-                <p className="text-xs text-slate-400 mt-0.5 leading-snug">
-                  Ask <span className="font-semibold text-slate-600">{inviteeName}</span> for the code sent to their email
-                </p>
-              </div>
-            </div>
-            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-slate-500 hover:bg-slate-100 transition-all">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="mb-4">
-            <input
-              autoFocus maxLength={6} value={otp}
-              onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
-              onKeyDown={e => e.key === 'Enter' && handleVerify()}
-              placeholder="· · · · · ·"
-              className="w-full px-4 py-4 text-center text-3xl font-black tracking-[0.5em] text-indigo-600 font-mono border-2 border-slate-200 rounded-2xl bg-slate-50 focus:outline-none focus:border-indigo-400 focus:bg-white transition-all placeholder:text-slate-200 placeholder:tracking-[0.4em] placeholder:text-2xl"
-            />
-          </div>
-          <p className="text-center text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100 mb-4">⏱ Code expires in 15 minutes</p>
-          {error && <p className="flex items-center gap-1.5 text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg border border-red-100 mb-4"><AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}</p>}
-          <div className="flex gap-2.5">
-            <button onClick={onClose} className="flex-1 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
-            <button onClick={handleVerify} disabled={loading || otp.length !== 6}
-              className="flex-1 py-2.5 text-sm font-semibold text-white bg-indigo-500 hover:bg-indigo-600 rounded-xl transition-all disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</> : <><CheckCircle className="w-4 h-4" /> Verify & Add</>}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const MembersModal = ({ team, api, onClose, onTeamUpdated }) => {
   const [email, setEmail]             = useState('');
   const [sendLoading, setSendLoading] = useState(false);
   const [removing, setRemoving]       = useState(null);
   const [error, setError]             = useState('');
   const [success, setSuccess]         = useState('');
-  const [otpModal, setOtpModal]       = useState(null);
   const members = team?.members || [];
 
-  const handleSendOTP = async () => {
+  const handleAddMember = async () => {
     if (!email.trim()) return setError('Enter the email address');
-    if (!/\S+@\S+\.\S+/.test(email)) return setError('Enter a valid email address');
+    if (!/\\S+@\\S+\\.\\S+/.test(email)) return setError('Enter a valid email address');
     setSendLoading(true); setError(''); setSuccess('');
     try {
-      const res = await api.post('/invites/send-otp', { teamId: team._id, email: email.trim() });
+      const res = await api.post(`/teams/${team._id}/members`, { email: email.trim() });
       setEmail('');
-      setSuccess(res.data.message);
-      setOtpModal({ inviteId: res.data.inviteId, inviteeName: res.data.inviteeName });
+      setSuccess('Member added successfully! 🎉');
+      onTeamUpdated(res.data.team || res.data);
     } catch (e) {
-      setError(e.response?.data?.message || 'Failed to send OTP');
+      setError(e.response?.data?.message || 'Failed to add member');
     } finally { setSendLoading(false); }
   };
-
-  const handleVerified = (updatedTeam) => { setOtpModal(null); setSuccess('Member added successfully! 🎉'); onTeamUpdated(updatedTeam); };
 
   const handleRemove = async (uid) => {
     setRemoving(uid); setError(''); setSuccess('');
@@ -261,63 +197,60 @@ const MembersModal = ({ team, api, onClose, onTeamUpdated }) => {
   };
 
   return (
-    <>
-      {otpModal && <OTPModal inviteId={otpModal.inviteId} inviteeName={otpModal.inviteeName} api={api} onVerified={handleVerified} onClose={() => setOtpModal(null)} />}
-      <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center"><Users className="w-4 h-4 text-indigo-500" /></div>
-              <div>
-                <h3 className="text-base font-bold text-slate-800 leading-tight">Manage Members</h3>
-                <p className="text-xs text-slate-400 mt-0.5">{team?.name} · {members.length} member{members.length !== 1 ? 's' : ''}</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="px-6 py-5 space-y-5">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center"><Users className="w-4 h-4 text-indigo-500" /></div>
             <div>
-              <div className="flex items-center gap-2 mb-1.5"><Mail className="w-3.5 h-3.5 text-indigo-400" /><p className="text-xs font-semibold text-slate-600 uppercase tracking-widest">Invite by Email</p></div>
-              <p className="text-xs text-slate-400 mb-3 leading-relaxed">An OTP will be sent to their email. Ask them to share the code with you to verify and add them.</p>
-              <div className="flex gap-2">
-                <input className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300"
-                  value={email} onChange={e => { setEmail(e.target.value); setError(''); }} onKeyDown={e => e.key === 'Enter' && handleSendOTP()} placeholder="colleague@company.com" type="email" disabled={sendLoading} />
-                <button onClick={handleSendOTP} disabled={sendLoading || !email.trim()} className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-500 hover:bg-indigo-600 rounded-xl transition-all disabled:opacity-50 active:scale-95 flex items-center gap-1.5 shrink-0">
-                  {sendLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}{sendLoading ? 'Sending…' : 'Send OTP'}
-                </button>
-              </div>
-              {error   && <p className="flex items-center gap-1.5 text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg border border-red-100 mt-3"><AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}</p>}
-              {success && <p className="flex items-center gap-1.5 text-emerald-600 text-xs bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 mt-3"><CheckCircle className="w-3.5 h-3.5 shrink-0" /> {success}</p>}
-            </div>
-            <div className="flex items-center gap-3"><div className="flex-1 h-px bg-slate-100" /><span className="text-xs text-slate-300 font-medium">Members</span><div className="flex-1 h-px bg-slate-100" /></div>
-            <div className="space-y-1.5 max-h-56 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#e2e8f0 transparent' }}>
-              {members.length === 0 ? (
-                <div className="text-center py-8"><Users className="w-8 h-8 text-slate-200 mx-auto mb-2" /><p className="text-slate-400 text-sm">No members yet</p></div>
-              ) : members.map((m) => {
-                const uid = m.user?._id || m._id || m;
-                const name = m.user?.name || m.name || 'Unknown';
-                const email = m.user?.email || m.email || '';
-                const isOwner = team.owner?._id?.toString() === uid?.toString() || team.owner?.toString() === uid?.toString();
-                return (
-                  <div key={uid} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100/80 transition-colors group">
-                    <Avatar seed={name} />
-                    <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-slate-700 truncate leading-tight">{name}</p><p className="text-xs text-slate-400 truncate">{email}</p></div>
-                    {isOwner ? (
-                      <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 shrink-0"><Crown className="w-3 h-3" /> Owner</span>
-                    ) : (
-                      <button onClick={() => handleRemove(uid)} disabled={removing === uid} className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 opacity-0 group-hover:opacity-100 shrink-0" title="Remove member">
-                        {removing === uid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserMinus className="w-3.5 h-3.5" />}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+              <h3 className="text-base font-bold text-slate-800 leading-tight">Manage Members</h3>
+              <p className="text-xs text-slate-400 mt-0.5">{team?.name} · {members.length} member{members.length !== 1 ? 's' : ''}</p>
             </div>
           </div>
-          <div className="flex justify-end px-6 pb-5"><button onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Done</button></div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><X className="w-4 h-4" /></button>
         </div>
+        <div className="px-6 py-5 space-y-5">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5"><UserPlus className="w-3.5 h-3.5 text-indigo-400" /><p className="text-xs font-semibold text-slate-600 uppercase tracking-widest">Add Member</p></div>
+            <p className="text-xs text-slate-400 mb-3 leading-relaxed">Enter their email to add them directly to the project.</p>
+            <div className="flex gap-2">
+              <input className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-slate-50 focus:outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300"
+                value={email} onChange={e => { setEmail(e.target.value); setError(''); }} onKeyDown={e => e.key === 'Enter' && handleAddMember()} placeholder="colleague@company.com" type="email" disabled={sendLoading} />
+              <button onClick={handleAddMember} disabled={sendLoading || !email.trim()} className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-500 hover:bg-indigo-600 rounded-xl transition-all disabled:opacity-50 active:scale-95 flex items-center gap-1.5 shrink-0">
+                {sendLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}{sendLoading ? 'Adding…' : 'Add Member'}
+              </button>
+            </div>
+            {error   && <p className="flex items-center gap-1.5 text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg border border-red-100 mt-3"><AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}</p>}
+            {success && <p className="flex items-center gap-1.5 text-emerald-600 text-xs bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 mt-3"><CheckCircle className="w-3.5 h-3.5 shrink-0" /> {success}</p>}
+          </div>
+          <div className="flex items-center gap-3"><div className="flex-1 h-px bg-slate-100" /><span className="text-xs text-slate-300 font-medium">Members</span><div className="flex-1 h-px bg-slate-100" /></div>
+          <div className="space-y-1.5 max-h-56 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#e2e8f0 transparent' }}>
+            {members.length === 0 ? (
+              <div className="text-center py-8"><Users className="w-8 h-8 text-slate-200 mx-auto mb-2" /><p className="text-slate-400 text-sm">No members yet</p></div>
+            ) : members.map((m) => {
+              const uid = m.user?._id || m._id || m;
+              const name = m.user?.name || m.name || 'Unknown';
+              const email = m.user?.email || m.email || '';
+              const isOwner = team.owner?._id?.toString() === uid?.toString() || team.owner?.toString() === uid?.toString();
+              return (
+                <div key={uid} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100/80 transition-colors group">
+                  <Avatar seed={name} />
+                  <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-slate-700 truncate leading-tight">{name}</p><p className="text-xs text-slate-400 truncate">{email}</p></div>
+                  {isOwner ? (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 shrink-0"><Crown className="w-3 h-3" /> Owner</span>
+                  ) : (
+                    <button onClick={() => handleRemove(uid)} disabled={removing === uid} className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 opacity-0 group-hover:opacity-100 shrink-0" title="Remove member">
+                      {removing === uid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserMinus className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex justify-end px-6 pb-5"><button onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">Done</button></div>
       </div>
-    </>
+    </div>
   );
 };
 
