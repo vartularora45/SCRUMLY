@@ -133,7 +133,7 @@ const JiraIntegration = () => {
                                         <li>User Identity API (Scopes: read:me) <span className="font-bold text-red-500">← This is usually the missing one!</span></li>
                                     </ul>
                                 </li>
-                                <li>Go to the <strong>Authorization</strong> tab and ensure the Callback URL is exactly: <code className="bg-slate-100 px-1 py-0.5 rounded">http://localhost:5000/api/jira/callback</code></li>
+                                <li>Go to the <strong>Authorization</strong> tab and ensure the Callback URL is exactly: <code className="bg-slate-100 px-1 py-0.5 rounded">{(import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '')}/api/jira/callback</code></li>
                                 <li>Save changes and try connecting again below.</li>
                             </ol>
                             <div className="pt-2">
