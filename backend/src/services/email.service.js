@@ -1,9 +1,6 @@
 import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
 
-dotenv.config();
-
-const APP_NAME = process.env.APP_NAME || 'Scrumly';
+const APP_NAME = process.env.APP_NAME || 'Scrumlyn';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -12,9 +9,6 @@ const transporter = nodemailer.createTransport({
     pass: process.env.GMAIL_APP_PASS,
   },
 });
-
-console.log('GMAIL_USER:', process.env.GMAIL_USER);
-console.log('GMAIL_APP_PASS:', process.env.GMAIL_APP_PASS);
 
 export const sendOTPEmail = async ({ toEmail, inviterName, teamName, otp }) => {
   await transporter.sendMail({

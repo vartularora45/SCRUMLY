@@ -3,44 +3,85 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import connectDB from './config/db.js';
+import helmet from 'helmet';
+import compression from 'compression';
+import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
-import authRoutes from './routes/auth.routes.js';
-import messageRoutes from './routes/message.routes.js';
-import boardRoutes from './routes/board.routes.js';
-import teamRoutes from './routes/team.routes.js';
-import taskRoutes from './routes/task.routes.js';
+
+import connectDB from './config/db.js';
+import { authLimiter, apiLimiter } from './middleware/rateLimit.middleware.js';
+
+import authRoutes     from './routes/auth.routes.js';
+import messageRoutes  from './routes/message.routes.js';
+import boardRoutes    from './routes/board.routes.js';
+import teamRoutes     from './routes/team.routes.js';
+import taskRoutes     from './routes/task.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
-import jiraRoutes from './routes/jira.routes.js';
-import inviteRoutes from './routes/invite.routes.js';
+import jiraRoutes     from './routes/jira.routes.js';
+import inviteRoutes   from './routes/invite.routes.js';
+import intelligenceRoutes from './routes/intelligence.routes.js';
+import moduleRoutes from './routes/module.routes.js';
+import alertRoutes from './routes/alert.routes.js';
 
 dotenv.config();
 
 const app = express();
 
-// ✅ HTTP server + Socket.IO setup
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+// FIX: Support multiple origins from env (was using broken || short-circuit logic)
+// Deduplicate origins
+const allowedOrigins = [...new Set(
+  (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+    .concat(process.env.NODE_ENV !== 'production' ? ['http://localhost:5173'] : [])
+)];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: ${origin} not allowed`));
+  },
+  credentials: true,
+}));
+
+// ─── Security & Perf Middleware ───────────────────────────────────────────────
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+app.use(compression());
+
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+}
+
+app.use(cookieParser());
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+
+// ─── HTTP Server + Socket.IO ──────────────────────────────────────────────────
 const httpServer = createServer(app);
+
 export const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173' || 'https://scrumlyn.vercel.app',
+    origin:      allowedOrigins.length ? allowedOrigins : '*',
     credentials: true,
   },
 });
 
-// Socket.IO connection handler
 io.on('connection', (socket) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
 
-  // User joins a team room
   socket.on('join_team', (teamId) => {
     socket.join(teamId);
-    console.log(`👥 Socket ${socket.id} joined team: ${teamId}`);
+    console.log(`👥 ${socket.id} joined team: ${teamId}`);
   });
 
-  // User leaves a team room
   socket.on('leave_team', (teamId) => {
     socket.leave(teamId);
-    console.log(`👋 Socket ${socket.id} left team: ${teamId}`);
   });
 
   socket.on('disconnect', () => {
@@ -48,62 +89,60 @@ io.on('connection', (socket) => {
   });
 });
 
-app.use(cookieParser());
-
+// ─── Database ─────────────────────────────────────────────────────────────────
 connectDB();
 
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true,
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+app.use('/api/', apiLimiter);
+app.use('/api/auth/', authLimiter);
 
-if (process.env.NODE_ENV === 'development') {
-  app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path}`);
-    next();
-  });
-}
-
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/board', boardRoutes);
-app.use('/api/teams', teamRoutes);
-app.use('/api/tasks', taskRoutes);
+// ─── Routes ───────────────────────────────────────────────────────────────────
+app.use('/api/auth',      authRoutes);
+app.use('/api/messages',  messageRoutes);
+app.use('/api/board',     boardRoutes);
+app.use('/api/teams',     teamRoutes);
+app.use('/api/tasks',     taskRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/jira', jiraRoutes);
-app.use('/api/invites', inviteRoutes);
+app.use('/api/jira',      jiraRoutes);
+app.use('/api/invites',   inviteRoutes);
+app.use('/api/intelligence', intelligenceRoutes);
+app.use('/api/modules', moduleRoutes);
+app.use('/api/alerts', alertRoutes);
 
+// ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({
-    success: true,
-    message: 'Auto-Scrum Master API is running',
+    success:   true,
+    message:   'Scrumlyn API is running',
     timestamp: new Date().toISOString(),
+    env:       process.env.NODE_ENV || 'development',
   });
 });
 
+// ─── 404 Handler ──────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
+// ─── Global Error Handler ─────────────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error('Global error:', err);
+  const isDev = process.env.NODE_ENV !== 'production';
+  console.error('Global error:', err.message);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    ...(isDev && { stack: err.stack }),
   });
 });
 
+// ─── Start Server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-
-// ✅ httpServer.listen — NOT app.listen
 httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Scrumlyn API running on port ${PORT}`);
   console.log(`⚡ Socket.IO ready`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ') || 'all'}`);
 });
 
 export default app;

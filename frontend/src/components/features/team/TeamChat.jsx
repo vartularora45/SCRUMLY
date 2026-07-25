@@ -2,13 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import Input from '../../common/Input';
 import Button from '../../common/Button';
 import { Send, Smile, Trash2, Sparkles, CheckCircle, XCircle, Edit3, ChevronDown, FolderKanban } from 'lucide-react';
-import axios from 'axios';
 import { io } from 'socket.io-client';
 import { useAuth } from '../../../context/AuthContext';
-
-const api = axios.create({
-    baseURL: import.meta.env.VITE_BACKEND_URL,
-});
+import api from '../../../api/client.js';
 
 // ─── AI Task Confirmation Modal ───────────────────────────────────────────────
 const AITaskModal = ({ aiResult, task, onConfirm, onReject }) => {
@@ -111,7 +107,7 @@ const AITaskModal = ({ aiResult, task, onConfirm, onReject }) => {
 const ChatMessage = ({ message, isMe, onDelete }) => (
     <div className={`flex gap-2.5 group ${isMe ? 'flex-row-reverse' : ''}`}>
         <img
-            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${message.sender?.name || message.user || 'user'}`}
+            src={`https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(message.sender?.name || message.user || 'user')}&backgroundColor=b6e3f4`}
             alt="avatar"
             className="w-7 h-7 rounded-full border border-slate-200 shrink-0 mt-1"
         />
@@ -174,8 +170,11 @@ const TeamChat = ({ teamId }) => {
 
         if (socketRef.current) socketRef.current.disconnect();
 
-        const socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
+        // Derive socket server URL from VITE_BACKEND_URL (strip /api suffix)
+        const backendUrl = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/api$/, '');
+        const socket = io(backendUrl, {
             auth: { token },
+            transports: ['websocket', 'polling'],
         });
         socketRef.current = socket;
 
@@ -192,8 +191,8 @@ const TeamChat = ({ teamId }) => {
                 return [...prev, message];
             });
 
-            // ✅ Socket se sirf OTHER users ke AI tasks add karo
-            // Apna task HTTP response se already add ho chuka hai
+            // ✅ Via socket: only add AI tasks from OTHER users (not current user)
+            // Current user's task was already added via the HTTP response
         });
 
         socket.on('message_deleted', (messageId) => {
@@ -259,8 +258,8 @@ const TeamChat = ({ teamId }) => {
                 msg.id === tempId ? { ...newMsg, isMe: true } : msg
             ));
 
-            // ✅ Backend ne task already banaya — sirf review modal dikhao
-            // handleTaskConfirm mein DOBARA POST /tasks NAHI karenge
+            // ✅ Backend already saved the task in createMessage — just show review modal
+            // In handleTaskConfirm we do NOT POST /tasks again (backend already saved it)
             if (data.data?.aiResult && data.data?.task) {
                 setPendingAI({
                     aiResult: data.data.aiResult,
@@ -275,8 +274,8 @@ const TeamChat = ({ teamId }) => {
         }
     };
 
-    // ✅ FIX: Sirf system message dikhao — NO api.post('/tasks') here
-    // Backend ne task already bana diya tha createMessage mein
+    // ✅ FIX: Only show system message — NO api.post('/tasks') here
+    // Backend already created the task inside createMessage
     const handleTaskConfirm = (editedTask) => {
         setPendingAI(null);
         // Just show a confirmation message in chat

@@ -58,5 +58,6 @@ const messageSchema = new mongoose.Schema({
 
 // Feed performance
 messageSchema.index({ teamId: 1, createdAt: -1 });
+messageSchema.index({ teamId: 1, isDeleted: 1 });
 
 export default mongoose.model('Message', messageSchema);

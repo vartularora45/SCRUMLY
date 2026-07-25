@@ -1,17 +1,28 @@
 import express from 'express';
-import { register, login, getMe,logoutAll,refreshToken,GoogleAuth } from '../controllers/auth.controller.js';
+import {
+  register,
+  login,
+  logout,
+  logoutAll,
+  refreshToken,
+  GoogleAuth,
+  getMe,
+  updateProfile,
+} from '../controllers/auth.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Public
-router.post('/register', register);
-router.post('/login', login);
-router.post('/refresh', refreshToken);
-router.post('/logout-all', protect, logoutAll);
-router.post('/google', GoogleAuth);
+// Public routes
+router.post('/register',    register);
+router.post('/login',       login);
+router.post('/google',      GoogleAuth);
+router.post('/refresh',     refreshToken);
+router.post('/logout',      logout);
 
-// Private
-router.get('/me', protect, getMe);
+// Protected routes
+router.get('/me',           protect, getMe);
+router.put('/profile',      protect, updateProfile);
+router.post('/logout-all',  protect, logoutAll);
 
 export default router;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import Layout from '../components/layout/Layout';
 import Button from '../components/common/Button';
+import { useToast } from '../components/common/Toast';
 import {
     Mail, ArrowRight, RefreshCw, CheckCircle,
     Users, Plus, Trash2, Edit2, UserPlus, UserMinus,
@@ -10,25 +10,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNavigate } from 'react-router-dom';
+import api from '../api/client.js';
 
-const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
-    withCredentials: true,
-});
-api.interceptors.request.use(config => {
-    const token = localStorage.getItem('token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-});
-
-const Toast = ({ msg, type = 'success', onClose }) => (
-    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg text-sm font-medium animate-slide-up
-        ${type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-        {type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-        {msg}
-        <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100"><X className="w-3.5 h-3.5" /></button>
-    </div>
-);
 
 // ─── Create / Edit Project Modal ──────────────────────────────────────────────
 const ProjectModal = ({ team, onClose, onSaved }) => {
@@ -40,7 +23,7 @@ const ProjectModal = ({ team, onClose, onSaved }) => {
     const [jiraStatus, setJiraStatus] = useState(null); // null | 'creating' | 'created' | 'skipped'
     const [jiraConnected, setJiraConnected] = useState(false);
 
-    // Jira connected hai ya nahi check karo
+        // Check if Jira is connected
     useEffect(() => {
         if (!isEdit) {
             api.get('/jira/status').then(r => {
@@ -53,7 +36,7 @@ const ProjectModal = ({ team, onClose, onSaved }) => {
         if (!name.trim()) return setError('Project name is required');
         setLoading(true); setError('');
 
-        // Jira connected hai toh indicator dikhao
+        // If Jira is connected, show the sync progress indicator
         if (!isEdit && jiraConnected) setJiraStatus('creating');
 
         try {
@@ -65,7 +48,7 @@ const ProjectModal = ({ team, onClose, onSaved }) => {
             }
 
             if (!isEdit && jiraConnected) {
-                // Backend mein auto create ho raha hai — 2 sec baad success dikhao
+                // Backend is auto-creating the Jira project — show success after 2s
                 setTimeout(() => setJiraStatus('created'), 2000);
                 setTimeout(() => {
                     onSaved(res.data.team || res.data, isEdit);
@@ -102,7 +85,7 @@ const ProjectModal = ({ team, onClose, onSaved }) => {
                     </button>
                 </div>
 
-                {/* Jira auto-sync indicator — sirf create mode mein */}
+                {/* Jira auto-sync indicator — only shown in create mode */}
                 {!isEdit && jiraConnected && (
                     <div className={`mb-4 flex items-center gap-3 px-4 py-3 rounded-xl border text-sm transition-all
                         ${jiraStatus === 'created'
@@ -175,7 +158,7 @@ const ProjectModal = ({ team, onClose, onSaved }) => {
 
 const Avatar = ({ seed }) => (
   <img
-    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}`}
+    src={`https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4`}
     alt={seed}
     className="w-9 h-9 rounded-full border-2 border-white shadow-sm shrink-0"
   />
@@ -378,6 +361,7 @@ const ProjectCard = ({ team, onEdit, onDelete, onManageMembers, onSelect, isActi
 const ProjectsPage = () => {
     const { activeTeam, setActiveTeam } = useAuth();
     const navigate = useNavigate();
+    const toast = useToast();
     const [projects,    setProjects]    = useState([]);
     const [loading,     setLoading]     = useState(true);
     const [error,       setError]       = useState('');
@@ -385,9 +369,12 @@ const ProjectsPage = () => {
     const [createModal, setCreateModal] = useState(false);
     const [editTarget,  setEditTarget]  = useState(null);
     const [membTarget,  setMembTarget]  = useState(null);
-    const [toast,       setToast]       = useState(null);
 
-    const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+    const showToast = (msg, type = 'success') => {
+        if (type === 'success') toast.success(msg);
+        else if (type === 'error') toast.error(msg);
+        else toast.info(msg);
+    };
 
     const fetchProjects = useCallback(async () => {
         setLoading(true); setError('');
@@ -485,7 +472,6 @@ const ProjectsPage = () => {
             {createModal && <ProjectModal onClose={() => setCreateModal(false)} onSaved={handleSaved} />}
             {editTarget  && <ProjectModal team={editTarget} onClose={() => setEditTarget(null)} onSaved={handleSaved} />}
             {membTarget  && <MembersModal team={membTarget} api={api} onClose={() => setMembTarget(null)} onTeamUpdated={handleTeamUpdated} />}
-            {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </Layout>
     );
 };

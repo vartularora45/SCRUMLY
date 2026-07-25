@@ -1,20 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import TaskCard from '../tasks/TaskCard';
 import { Plus, X, Loader2, AlertCircle, History, Sparkles, Download, ChevronDown } from 'lucide-react';
 import Badge from '../../common/Badge';
 import { useAuth } from '../../../context/AuthContext.jsx';
-
-const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
-    withCredentials: true,
-});
-
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-});
+import api from '../../../api/client.js';
+import { io } from 'socket.io-client';
 
 const COLUMNS = [
     { title: 'To Do',       colId: 'TODO',        statusLabel: 'Todo',        badgeVariant: 'secondary', accent: '#94a3b8', bg: 'from-slate-50 to-slate-100/60',         border: 'border-slate-200',   dot: 'bg-slate-400',   countBg: 'bg-slate-200 text-slate-600' },
@@ -233,9 +223,9 @@ const AddTaskModal = ({ columnStatus, teamId, onClose, onCreated }) => {
     const [loading, setLoading]       = useState(false);
     const [error, setError]           = useState('');
     const [jiraProjects, setJiraProjects] = useState([]);
-    const [jiraProjectKey, setJiraProjectKey] = useState('none'); // 'none' = Jira pe mat bhejo
+    const [jiraProjectKey, setJiraProjectKey] = useState('none'); // 'none' = don't sync to Jira
 
-    // Jira projects fetch karo (agar connected hai)
+    // Fetch Jira projects if connected
     useEffect(() => {
         api.get('/jira/status').then(r => {
             if (r.data.connected && r.data.projects?.length > 0) {
@@ -256,7 +246,7 @@ const AddTaskModal = ({ columnStatus, teamId, onClose, onCreated }) => {
                 // Jira project select kiya hai toh bhejo
                 ...(jiraProjectKey !== 'none' && { jiraProjectKey }),
             });
-            onCreated(res.data); onClose();
+            onCreated(res.data.data); onClose();
         } catch (e) {
             setError(e.response?.data?.message || 'Failed to create task');
         } finally { setLoading(false); }
@@ -285,7 +275,7 @@ const AddTaskModal = ({ columnStatus, teamId, onClose, onCreated }) => {
                     </FormField>
                 </div>
 
-                {/* Jira project select — sirf tab dikhao jab connected ho */}
+                {/* Jira project select — only shown when connected */}
                 {jiraProjects.length > 0 && (
                     <FormField label="Also create in Jira" optional>
                         <select className={inputCls} value={jiraProjectKey} onChange={e => setJiraProjectKey(e.target.value)}>
@@ -298,20 +288,6 @@ const AddTaskModal = ({ columnStatus, teamId, onClose, onCreated }) => {
                             <p className="text-xs text-indigo-500 mt-1.5 flex items-center gap-1">
                                 ✓ Issue will be created in Jira automatically
                             </p>
-                        )}
-                    </FormField>
-                )}
-
-                {jiraProjects.length > 0 && (
-                    <FormField label="Also create in Jira" optional>
-                        <select className={inputCls} value={jiraProjectKey} onChange={e => setJiraProjectKey(e.target.value)}>
-                            <option value="none">— Don't sync to Jira —</option>
-                            {jiraProjects.map(p => (
-                                <option key={p.key} value={p.key}>{p.name} ({p.key})</option>
-                            ))}
-                        </select>
-                        {jiraProjectKey !== 'none' && (
-                            <p className="text-xs text-indigo-500 mt-1.5">✓ Issue will be created in Jira automatically</p>
                         )}
                     </FormField>
                 )}
@@ -342,7 +318,7 @@ const EditTaskModal = ({ task, onClose, onUpdated }) => {
         setLoading(true); setError('');
         try {
             const res = await api.put(`/tasks/${task._id}`, { title: form.title.trim(), description: form.description.trim(), priority: form.priority, ...(form.assignee && { assignee: form.assignee }) });
-            onUpdated(res.data); onClose();
+            onUpdated(res.data.data); onClose();
         } catch (e) {
             setError(e.response?.data?.message || 'Failed to update task');
         } finally { setLoading(false); }
@@ -359,7 +335,7 @@ const EditTaskModal = ({ task, onClose, onUpdated }) => {
                         {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
                     </select>
                 </FormField>
-                <p className="text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">💡 Status change ke liye card ko drag karke column mein drop karo</p>
+                <p className="text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">💡 Drag the card to a different column to change its status</p>
                 {error && <p className="text-red-500 text-sm flex items-center gap-1.5 bg-red-50 px-3 py-2 rounded-lg"><AlertCircle className="w-4 h-4 shrink-0" /> {error}</p>}
             </div>
             <div className="flex gap-2.5 px-6 pb-6 justify-end">
@@ -379,7 +355,7 @@ const HistoryModal = ({ taskId, onClose }) => {
 
     useEffect(() => {
         api.get(`/tasks/${taskId}/history`)
-            .then(r => setHistory(Array.isArray(r.data) ? r.data : []))
+            .then(r => setHistory(Array.isArray(r.data?.data) ? r.data.data : []))
             .catch(() => setHistory([]))
             .finally(() => setLoading(false));
     }, [taskId]);
@@ -394,7 +370,7 @@ const HistoryModal = ({ taskId, onClose }) => {
                 {loading ? (
                     <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-indigo-400" /></div>
                 ) : history.length === 0 ? (
-                    <p className="text-slate-400 text-sm text-center py-12">Koi history nahi mili.</p>
+                    <p className="text-slate-400 text-sm text-center py-12">No status history found for this task.</p>
                 ) : (
                     <div className="max-h-72 overflow-y-auto -mx-1 px-1 space-y-1">
                         {[...history].reverse().map((h, i) => {
@@ -422,46 +398,112 @@ const HistoryModal = ({ taskId, onClose }) => {
 // ─── Kanban Column ─────────────────────────────────────────────────────────────
 const KanbanColumn = ({ col, tasks, onAddTask, onDrop, onEdit, onDelete, onViewHistory, onImportJira, onExportJira }) => {
     const [over, setOver] = useState(false);
+
+    const emptyMessages = {
+        'TODO':        { text: 'No tasks to do', hint: 'Click + Add Task to get started' },
+        'IN_PROGRESS': { text: 'Nothing in progress', hint: 'Drag a task here to start working' },
+        'DONE':        { text: 'No completed tasks', hint: 'Completed tasks will appear here' },
+        'BLOCKED':     { text: 'No blocked tasks', hint: 'Blocked tasks will appear here' },
+    };
+    const emptyMsg = emptyMessages[col.colId] || { text: 'No tasks', hint: '' };
+
     return (
-        <div className="flex flex-col w-72 shrink-0 rounded-2xl overflow-hidden border transition-all duration-200"
-            style={{ borderColor: over ? col.accent : 'transparent', background: over ? `${col.accent}08` : 'transparent', boxShadow: over ? `0 0 0 2px ${col.accent}40` : 'none' }}
+        <div
+            className="flex flex-col w-72 shrink-0 rounded-2xl overflow-hidden transition-all duration-200"
+            style={{
+                background: over ? `${col.accent}07` : 'rgba(248,250,252,0.80)',
+                border: `1.5px solid ${over ? col.accent + '60' : 'rgba(226,232,240,0.80)'}`,
+                boxShadow: over
+                    ? `0 0 0 3px ${col.accent}20, 0 4px 24px -4px rgba(0,0,0,0.08)`
+                    : '0 1px 4px rgba(0,0,0,0.04)',
+            }}
             onDragOver={e => { e.preventDefault(); setOver(true); }}
-            onDragLeave={() => setOver(false)}
-            onDrop={e => { e.preventDefault(); setOver(false); onDrop(e.dataTransfer.getData('taskId'), col.colId); }}>
-            <div className={`flex items-center justify-between px-4 py-3.5 bg-gradient-to-r ${col.bg} border-b ${col.border}`}>
-                <div className="flex items-center gap-2.5">
-                    <div className={`w-2 h-2 rounded-full ${col.dot}`} />
-                    <h4 className="text-sm font-bold text-slate-700 tracking-tight">{col.title}</h4>
-                </div>
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); }}
+            onDrop={e => { e.preventDefault(); setOver(false); onDrop(e.dataTransfer.getData('taskId'), col.colId); }}
+        >
+            {/* Column header */}
+            <div className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: `1.5px solid ${col.accent}20` }}>
                 <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${col.countBg}`}>{tasks.length}</span>
-                    {col.colId === 'TODO' && onImportJira && (
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={onExportJira}
-                                title="Export tasks to Jira"
-                                className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
-                            >
-                                <Download className="w-3 h-3" /> Export
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-            <div className={`flex-1 overflow-y-auto p-3 space-y-2.5 bg-gradient-to-b ${col.bg} min-h-[120px]`} style={{ scrollbarWidth: 'thin', scrollbarColor: '#e2e8f0 transparent' }}>
-                {tasks.map(task => (
-                    <div key={task._id} className="group cursor-grab active:cursor-grabbing active:scale-[0.98] transition-transform" draggable onDragStart={e => e.dataTransfer.setData('taskId', task._id)}>
-                        <TaskCard {...task} status={col.statusLabel} assignee={task.assignee?.name || task.assignee}
-                            onEdit={() => onEdit(task)} onDelete={() => onDelete(task._id)} onViewHistory={() => onViewHistory(task._id)} />
+                    <div className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-full ${col.dot}`} />
+                        <h4 className="text-[13px] font-bold text-slate-700">{col.title}</h4>
                     </div>
-                ))}
+                    <span
+                        className="text-xs font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: col.accent + '18', color: col.accent }}
+                    >
+                        {tasks.length}
+                    </span>
+                </div>
+                {col.colId === 'TODO' && onImportJira && (
+                    <button
+                        onClick={onExportJira}
+                        title="Export tasks to Jira"
+                        className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+                    >
+                        <Download className="w-3 h-3" /> Export
+                    </button>
+                )}
             </div>
-            <div className={`p-3 bg-gradient-to-b ${col.bg} border-t ${col.border}`}>
-                <button onClick={() => onAddTask(col.colId)}
-                    className="w-full py-2 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-1.5 border-2 border-dashed hover:border-solid"
-                    style={{ borderColor: `${col.accent}60`, color: col.accent }}
-                    onMouseEnter={e => { e.currentTarget.style.background = `${col.accent}10`; e.currentTarget.style.borderColor = col.accent; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = `${col.accent}60`; }}>
+
+            {/* Task list */}
+            <div
+                className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar"
+                style={{ minHeight: '120px', maxHeight: 'calc(100vh - 16rem)' }}
+            >
+                {tasks.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <div
+                            className="w-10 h-10 rounded-xl flex items-center justify-center mb-2"
+                            style={{ background: col.accent + '12' }}
+                        >
+                            <div className={`w-2 h-2 rounded-full ${col.dot} opacity-60`} />
+                        </div>
+                        <p className="text-xs font-medium text-slate-400">{emptyMsg.text}</p>
+                        <p className="text-[11px] text-slate-300 mt-0.5">{emptyMsg.hint}</p>
+                    </div>
+                ) : (
+                    tasks.map(task => (
+                        <div
+                            key={task._id}
+                            className="active:scale-[0.98] transition-transform"
+                            draggable
+                            onDragStart={e => e.dataTransfer.setData('taskId', task._id)}
+                        >
+                            <TaskCard
+                                {...task}
+                                status={col.statusLabel}
+                                assignee={task.assignee?.name || task.assignee}
+                                onEdit={() => onEdit(task)}
+                                onDelete={() => onDelete(task._id)}
+                                onViewHistory={() => onViewHistory(task._id)}
+                            />
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Add Task footer */}
+            <div className="p-3" style={{ borderTop: `1px solid ${col.accent}15` }}>
+                <button
+                    onClick={() => onAddTask(col.colId)}
+                    className="w-full py-2 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center gap-1.5"
+                    style={{
+                        border: `1.5px dashed ${col.accent}55`,
+                        color: col.accent,
+                        background: 'transparent',
+                    }}
+                    onMouseEnter={e => {
+                        e.currentTarget.style.background = col.accent + '0f';
+                        e.currentTarget.style.borderStyle = 'solid';
+                        e.currentTarget.style.borderColor = col.accent + '80';
+                    }}
+                    onMouseLeave={e => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.borderStyle = 'dashed';
+                        e.currentTarget.style.borderColor = col.accent + '55';
+                    }}
+                >
                     <Plus className="w-3.5 h-3.5" /> Add Task
                 </button>
             </div>
@@ -488,7 +530,7 @@ const KanbanBoard = ({ searchQuery = '' }) => {
         setLoading(true); setError('');
         try {
             const res = await api.get(`/tasks/${teamId}`);
-            const raw = Array.isArray(res.data) ? res.data : [];
+            const raw = Array.isArray(res.data?.data) ? res.data.data : [];
             const seen = new Set();
             setTasks(raw.filter(t => seen.has(t._id) ? false : seen.add(t._id)));
         } catch (e) {
@@ -496,7 +538,50 @@ const KanbanBoard = ({ searchQuery = '' }) => {
         } finally { setLoading(false); }
     }, [teamId]);
 
-    useEffect(() => { fetchTasks(); }, [fetchTasks]);
+    const [realtimePopup, setRealtimePopup] = useState(null); // { message: string }
+
+    useEffect(() => { 
+        fetchTasks(); 
+        
+        if (!teamId) return;
+
+        // Initialize Socket
+        const socket = io(import.meta.env.VITE_BACKEND_URL, {
+            withCredentials: true,
+            transports: ['websocket', 'polling']
+        });
+
+        socket.emit('join_team', teamId);
+
+        socket.on('taskCreated', (newTask) => {
+            if (newTask) {
+                setTasks(prev => prev.some(t => t._id === newTask._id) ? prev : [...prev, newTask]);
+                showPopup("🔥 Someone just added a task!");
+            }
+        });
+
+        socket.on('taskDeleted', (taskId) => {
+            if (taskId) {
+                setTasks(prev => prev.filter(t => t._id !== taskId));
+                showPopup("🗑️ Someone just deleted a task!");
+            }
+        });
+
+        socket.on('taskStatusUpdated', (updatedTask) => {
+            setTasks(prev => prev.map(t => t._id === updatedTask._id ? updatedTask : t));
+            showPopup(`🚀 Task "${updatedTask.title}" was moved to ${updatedTask.status}!`);
+        });
+
+        return () => {
+            socket.emit('leave_team', teamId);
+            socket.disconnect();
+        };
+    }, [fetchTasks, teamId]);
+
+    const showPopup = (msg) => {
+        setRealtimePopup(msg);
+        setTimeout(() => setRealtimePopup(null), 3000); // Auto-hide after 3s
+    };
 
     const handleDrop = async (taskId, newStatus) => {
         const prev = tasks;
@@ -508,7 +593,7 @@ const KanbanBoard = ({ searchQuery = '' }) => {
     const handleCreated  = (newTask)  => setTasks(t => t.some(x => x._id === newTask._id) ? t : [newTask, ...t]);
     const handleUpdated  = (updated)  => setTasks(t => t.map(x => x._id === updated._id ? updated : x));
 
-    // Jira import callback — naye tasks board pe add karo
+    // Jira import callback — add newly imported tasks to the board
     const handleImported = (newTasks) => {
         setTasks(prev => {
             const existingIds = new Set(prev.map(t => t._id));
@@ -576,6 +661,21 @@ const KanbanBoard = ({ searchQuery = '' }) => {
             {histModal   && <HistoryModal    taskId={histModal}                      onClose={() => setHistModal(null)} />}
             {importModal && <ImportJiraModal teamId={teamId}                         onClose={() => setImportModal(false)} onImported={handleImported} />}
             {exportModal && <ExportJiraModal  teamId={teamId}                         onClose={() => setExportModal(false)} />}
+
+            {/* Non-intrusive real-time toast notification */}
+            {realtimePopup && (
+                <div className="fixed bottom-6 right-6 z-[100] pointer-events-none animate-slide-up">
+                    <div className="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-white/10" style={{ maxWidth: '320px' }}>
+                        <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-4 h-4 text-indigo-400" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-0.5">Live Update</p>
+                            <p className="text-sm text-slate-100 font-medium truncate">{realtimePopup}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

@@ -70,7 +70,12 @@ export const jiraCallback = async (req, res) => {
 
     res.redirect(`${process.env.FRONTEND_URL}/integrations?jira=success`);
   } catch (error) {
-    console.error('❌ Jira Callback Error:', error.response?.data || error.message);
+    console.error('❌ Jira Callback Error Details:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      url: error.config?.url
+    });
     res.redirect(`${process.env.FRONTEND_URL}/integrations?jira=error`);
   }
 };

@@ -41,6 +41,15 @@ const taskSchema = new mongoose.Schema({
     ref: 'Message',
   },
 
+  moduleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Module',
+  },
+
+  dueDate: {
+    type: Date,
+  },
+
   assignee: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -96,6 +105,8 @@ const taskSchema = new mongoose.Schema({
 
 // Board performance
 taskSchema.index({ teamId: 1, status: 1, columnOrder: 1 });
+taskSchema.index({ teamId: 1, isArchived: 1 });
 taskSchema.index({ jiraIssueKey: 1 });
+taskSchema.index({ assignee: 1 });
 
 export default mongoose.model('Task', taskSchema);

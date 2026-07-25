@@ -3,12 +3,13 @@ import Layout from '../components/layout/Layout';
 import TeamChat from '../components/features/team/TeamChat';
 import KanbanBoard from '../components/features/team/KanbanBoard';
 import { useAuth } from '../context/AuthContext.jsx';
-import { LayoutGrid, MessageSquare, ChevronLeft, Users, Sparkles } from 'lucide-react';
+import { LayoutGrid, MessageSquare, ChevronLeft, Users, Sparkles, Search, X } from 'lucide-react';
 
 const TeamBoard = () => {
     const { activeTeam } = useAuth();
     const team_id = activeTeam ? activeTeam._id : null;
     const [view, setView] = useState('chat'); // 'chat' | 'board'
+    const [searchQuery, setSearchQuery] = useState('');
 
     const memberCount = activeTeam?.members?.length || 0;
 
@@ -55,8 +56,27 @@ const TeamBoard = () => {
                         </div>
                     </div>
 
-                    {/* Right: view toggle pill */}
-                    <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
+                    {/* Right: view toggle pill + search */}
+                    <div className="flex items-center gap-2">
+                        {/* Search bar — only visible when in board view */}
+                        {view === 'board' && (
+                            <div className="relative">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder="Search tasks…"
+                                    className="pl-8 pr-8 py-2 text-xs border border-slate-200 rounded-lg bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all w-44"
+                                />
+                                {searchQuery && (
+                                    <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
                         <button
                             onClick={() => setView('chat')}
                             className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-200
@@ -79,6 +99,7 @@ const TeamBoard = () => {
                             <LayoutGrid className="w-4 h-4" />
                             Tasks
                         </button>
+                        </div>
                     </div>
                 </div>
 
@@ -128,7 +149,7 @@ const TeamBoard = () => {
                                 : 'translate-x-8 opacity-0 pointer-events-none'
                             }`}
                     >
-                        <KanbanBoard />
+                        <KanbanBoard searchQuery={searchQuery} />
                     </div>
                 </div>
             </div>

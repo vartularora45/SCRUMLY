@@ -53,5 +53,6 @@ const teamSchema = new mongoose.Schema({
 
 
 teamSchema.index({ 'members.user': 1 });
+teamSchema.index({ owner: 1 });
 
 export default mongoose.model('Team', teamSchema);
